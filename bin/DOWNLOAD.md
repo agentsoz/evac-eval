@@ -6,5 +6,6 @@ Please download the files listed below manually from [here](https://cloudstor.aa
 
 | Item | Model | Instructions |
 | --- | --- | --- |
-|  `ees-2.1.1-SNAPSHOT-release.zip` | EES | Download into the current directory and unzip the archive. Refer to pacakged `README.md` for instructions on how to run the model. |
-| `/conda_packages` | GSSEM | Download into the current directory. Refer to Geostack workshop notes for instructions on how to install and run in python. |
+|  `ees/ees-2.1.1-SNAPSHOT-release.zip` | EES | Download into the current directory and unzip the archive. Refer to pacakged `README.md` for instructions on how to run the model. |
+| `gssem/conda_packages` | GSSEM python builds | Download into the current directory. Refer to Geostack workshop notes for instructions on how to install and run in python. |
+| `gssem/linux` | GSSEM linux build | Download into the current directory. Then from inside the `linux` direcotry try the gssem example as `./GeostackNetworkFlow --confg ./data/test_network_flow.json` |
