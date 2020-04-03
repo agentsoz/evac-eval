@@ -42,3 +42,12 @@ The full synthetic population for Greater Melbourne for the 2016 census is avail
 The household files for a given region can be converted to the GeoTIFF format required by GSSEM using the script here: https://bitbucket.csiro.au/users/for321/repos/emv2/browse/data-munging/synthetic-population-csv-to-vector.R
 
 **TODO**: The script should be copied here and adjusted as needed.
+
+## How to create MATSim Population XML from ABS 2016 Synthetic Population
+
+The following script takes the archetypes population CSV-that is based on the ABS 2016 Synthetic Population-and converts it to the MATSim XML file. To run, do
+```
+./createMATSimPopnFromArchetypesCsv.sh
+```
+
+**TODO**: To create a *dumber* population file for the EES model we need to change the relevant columns in the CSV and generate simpler versions of the population using this script. For instance, to disable the behaviour of going to check on dependants we can just set the column `HasDependents` to `false`. If we set all attributes for every person to the same value (other than their XY locations), then they will all display the same behaviour.

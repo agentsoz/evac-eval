@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-INCSV=./population-archetypes.csv.gz
+INCSV=../scenarios/mount-alexander-shire/castlemaine-region/population-archetypes.csv.gz
 OUTXML=./population-archetypes.xml
-EESDIR=../../../bin/ees-2.1.1-SNAPSHOT
+EESDIR=../bin/ees-2.1.1-SNAPSHOT
 
 Rscript --vanilla './create-archetypes-csv.R'
 
