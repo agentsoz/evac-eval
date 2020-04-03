@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 INCSV=./population-archetypes.csv.gz
 OUTXML=./population-archetypes.xml
+EESDIR=../../../bin/ees-2.1.1-SNAPSHOT
 
 Rscript --vanilla './create-archetypes-csv.R'
 
-CMD="unzip -o ../../../target/ees-2.1.1-SNAPSHOT-release.zip -d ."
-echo $CMD; eval $CMD
+#CMD="unzip -o ../../../target/ees-2.1.1-SNAPSHOT-release.zip -d ."
+#echo $CMD; eval $CMD
 
-CMD="java -cp ees-2.1.1-SNAPSHOT/libs/*:ees-2.1.1-SNAPSHOT/ees-2.1.1-SNAPSHOT.jar \
+CMD="java -cp $EESDIR/libs/*:$EESDIR/ees-2.1.1-SNAPSHOT.jar \
   io.github.agentsoz.ees.util.SynthpopToMatsim \
   --incsv $INCSV \
   --outxml $OUTXML \
