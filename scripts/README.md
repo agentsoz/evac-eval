@@ -16,6 +16,7 @@ If all went well, you should have the following files created in your current di
 
 ```
 
+**TODO**: The produced GeoJSON files then need be be converted to GeoTIFF format as required by GSSEM.
 
 ## How to convert Phoenix fire model Shapefile to GeoJSON
 
@@ -30,3 +31,14 @@ ogr2ogr -f "GeoJson" -t_srs EPSG:28355 ffdi100d_grid.json ffdi100d_grid.shp
 Example Phoenix fire shapefiles for the regions are available in the `ees-data` repository:
 * Mount Alexander Shire: https://github.com/agentsoz/ees-data/tree/master/mount-alexander-shire/phoenix-shapefiles/20181109
 * Surf Coast Shire: https://github.com/agentsoz/ees-data/tree/master/surf-coast-shire/phoenix
+
+**TODO**: The produced GeoJSON files then need be be converted to GeoTIFF format as required by GSSEM.
+
+
+## How to convert ABS 2016 Synthetic Population CSV to GeoTiff
+
+The full synthetic population for Greater Melbourne for the 2016 census is available here: https://github.com/agentsoz/synthetic-population/tree/master/data.
+
+The household files for a given region can be converted to the GeoTIFF format required by GSSEM using the script here: https://bitbucket.csiro.au/users/for321/repos/emv2/browse/data-munging/synthetic-population-csv-to-vector.R
+
+**TODO**: The script should be copied here and adjusted as needed.
