@@ -13,7 +13,7 @@ dir=`dirname "$0"`
 ver=12.0-2019w45-SBB
 jar=$dir/matsim-$ver/matsim-$ver.jar
 zipurl=https://dl.bintray.com/matsim/matsim/org/matsim/matsim/$ver/matsim-$ver-release.zip
-https://dl.bintray.com/matsim/matsim/org/matsim/matsim/12.0-2019w45-SBB/matsim-12.0-2019w45-SBB-release.zip
+#https://dl.bintray.com/matsim/matsim/org/matsim/matsim/12.0-2019w45-SBB/matsim-12.0-2019w45-SBB-release.zip
 
 class_links2esri=org.matsim.utils.gis.matsim2esri.network.Links2ESRIShape
 netFile=
