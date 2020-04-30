@@ -16,32 +16,37 @@ If all went well, you should have the following files created in your current di
 
 ```
 
-**TODO**: The produced GeoJSON files then need be be converted to GeoTIFF format as required by GSSEM.
+**NOTE**: Currently the output files are generated in current directory but these files needs to be moved into `/scenarios/mount-alexander-shire/castlemaine-region/gssem`. I am working on this.
 
-## How to convert Phoenix fire model Shapefile to GeoJSON
+## How to convert Phoenix fire model Shapefile to GeoTiff
 
-**Important**: requires `GDAL2.4`
+**Important**: requires `GDAL2.4`, `Python3.6`.
 
-Example command to convert the fire Shapefile `ffdi100d_grid.shp` to GeoJSON format:
-```
-ogr2ogr -f "GeoJson" -t_srs EPSG:28355 ffdi100d_grid.json ffdi100d_grid.shp
-
-```
+The script that converts the Phoenix fire model shapefile into Geotiff is `shp_to_geotiff_ffdi.py`. This script will take `20181109_mountalex_evac_ffdi100d_grid.shp` from `/scenarios/mount-alexander-shire/castlemaine-region/` as input shape file, convert into GeoTiff and save the output GeoTiff file into `/scenarios/mount-alexander-shire/castlemaine-region/gssem` as `20181109_mountalex_evac_ffdi100d_grid.tif`.
 
 Example Phoenix fire shapefiles for the regions are available in the `ees-data` repository:
 * Mount Alexander Shire: https://github.com/agentsoz/ees-data/tree/master/mount-alexander-shire/phoenix-shapefiles/20181109
 * Surf Coast Shire: https://github.com/agentsoz/ees-data/tree/master/surf-coast-shire/phoenix
 
-**TODO**: The produced GeoJSON files then need be be converted to GeoTIFF format as required by GSSEM.
-
-
 ## How to convert ABS 2016 Synthetic Population CSV to GeoTiff
+
+**Important**: requires `GDAL2.4`, `Python3.6`, `R3.6`.
 
 The full synthetic population for Greater Melbourne for the 2016 census is available here: https://github.com/agentsoz/synthetic-population/tree/master/data.
 
-The household files for a given region can be converted to the GeoTIFF format required by GSSEM using the script here: https://bitbucket.csiro.au/users/for321/repos/emv2/browse/data-munging/synthetic-population-csv-to-vector.R
+The script used to convert the `population-archetypes.csv.gz` into GeoJSON is `Population_to_geojson.R`. To run this script from commandline go to the /script directory and type the following command `Rscript Population_to_geojson.R` 
 
-**TODO**: The script should be copied here and adjusted as needed.
+Once the GeoJSON file is converted then following command is used to convert the `castlemaine-area_pop.json` GeoJSON file to shape file.
+
+```
+ogr2ogr -nlt POINT -skipfailures castlemaine-area_pop.shp castlemaine-area_pop.json OGRGeoJSON  
+
+```
+
+Once the shape file is generated then use the script `shp_to_tiff_pop.py` to convert the shape file into GeoTiff
+
+
+**Note**: Full automation of the script is in progress.
 
 ## How to create MATSim Population XML from ABS 2016 Synthetic Population
 

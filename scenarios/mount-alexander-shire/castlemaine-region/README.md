@@ -35,6 +35,8 @@ Message | Time sent | Zones sent to |
 
 ## Phoenix fire GeoJSON
 
+File `20181109_mountalex_evac_ffdi100d_grid.shp` is the original shape file used as input file to convert the shp file to GeoTIFF file.
+
 File `20181109_mountalex_evac_ffdi100d_grid.json` was generated using:
 ```
 ogr2ogr -f "GeoJson" -t_srs EPSG:28355 \
