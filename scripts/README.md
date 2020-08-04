@@ -56,3 +56,15 @@ The following script takes the archetypes population CSV-that is based on the AB
 ```
 
 **TODO**: To create a *dumber* population file for the EES model we need to change the relevant columns in the CSV and generate simpler versions of the population using this script. For instance, to disable the behaviour of going to check on dependants we can just set the column `HasDependents` to `false`. If we set all attributes for every person to the same value (other than their XY locations), then they will all display the same behaviour.
+
+## Example Conversion of input files using Geostack
+
+For Geostack NetworkFlowSolver, the input file format needs to be in GeoTiff and/or GeoJSON format. To convert the files using GEostack library, following steps are to be followed:
+
+Step 1 : You need to have Geostack library installed with all necessary packages. All the information needed to either installing the packages(https://gitlab.com/geostack/library/-/wikis/Setup%20conda%20environment%20and%20install%20geostack%20package) or building the package on windows machine( https://gitlab.com/geostack/library/-/wikis/Building-Geostack-on-Windows , linux machine(https://gitlab.com/geostack/library/-/wikis/Building-Geostack-on-Linux) and on macOS(https://gitlab.com/geostack/library/-/wikis/Building-Geostack-on-macOS) can be found on the links provided.
+
+Step 2: Now, once the package is installed for example using this https://gitlab.com/geostack/library/-/wikis/Setup%20conda%20environment%20and%20install%20geostack%20package, the next step would be to open the Anaconda Prompt and activate the Geostack Conda environment. Tis can be done by typing `conda activate geostack`.
+
+Step 3: Once the Geostack environment is activated, the next step would be to get into right directory where all scripts are placed. A new directory `Inputconversion` is created to test the input conversion of the fire file and the population file. The directory also consist of the population json file required by the script. The directory will be`/evac-eval/scripts/InputConversion`. 
+
+Step 4: Now, run the InputConversion.py file to convert the fire file and the population file into GeoTiff using the Geostack library. To run the file, from commandline type in `python InputConversion.py` and the python script will produce the output files in `evac-eval\scenarios\mount-alexander-shire\castlemaine-region\gssem`
