@@ -10,10 +10,11 @@ matsimNetwork2ESRI.sh -net output_network.xml.gz -outl networkL.shp -outp networ
 EOF
 
 dir=`dirname "$0"`
-ver=12.0-2019w45-SBB
+ver=12.0
 jar=$dir/matsim-$ver/matsim-$ver.jar
-zipurl=https://dl.bintray.com/matsim/matsim/org/matsim/matsim/$ver/matsim-$ver-release.zip
-https://dl.bintray.com/matsim/matsim/org/matsim/matsim/12.0-2019w45-SBB/matsim-12.0-2019w45-SBB-release.zip
+zipurl=https://github.com/matsim-org/matsim-libs/releases/download/matsim-$ver/matsim-$ver-release.zip
+zipfile=$dir/matsim-$ver-release.zip
+#https://github.com/matsim-org/matsim-libs/releases/download/matsim-12.0/matsim-12.0-release.zip
 
 class_links2esri=org.matsim.utils.gis.matsim2esri.network.Links2ESRIShape
 netFile=
@@ -44,11 +45,15 @@ if [ "$netFile" == "" ] || [ "$outputFileLs" == "" ] | [ "outputFileP" == "" ] |
   exit
 fi
 
-if [ ! -f $jar ] ; then
+if [ ! -f $zipfile ] ; then
   printf "\nDid not find MATSim JAR ($jar) so will download it now\n"
-  cmd="wget -O $dir/matsim.zip $zipurl"; echo $cmd; eval $cmd
-  cmd="unzip -o $dir/matsim.zip"; echo $cmd; eval $cmd
-  cmd="rm -f $dir/matsim.zip"; echo $cmd; eval $cmd
+  cmd="wget -O $zipfile $zipurl"; echo $cmd; eval $cmd
+else
+  printf "\nFound MATSim Zip ($zipfile) so will use it\n"
+fi
+
+if [ ! -f $jar ] ; then
+  cmd="unzip -o $zipfile"; echo $cmd; eval $cmd
 else
   printf "\nFound MATSim JAR ($jar) so will use it\n"
 fi

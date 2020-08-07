@@ -1,7 +1,7 @@
-dir=$(dirname "$0")
-
-matsim2esri=$dir/matsimNetwork2Shape.sh
-esri2json=$dir/shapefile2json.py
+thisdir=$(dirname "$0")
+dir=$thisdir/../data
+matsim2esri=$thisdir/matsimNetwork2Shape.sh
+esri2json=$thisdir/shapefile2json.py
 
 function toJson() {
   prefix=$1
@@ -37,16 +37,16 @@ function build() {
 build \
   "loddon_mallee_northern_cluster_shires_network" \
   "EPSG:28355" \
-  "https://github.com/agentsoz/ees/raw/master/scenarios/loddon-mallee-northern-cluster-shires/loddon_mallee_northern_cluster_shires_network.xml.gz"
+  "https://github.com/agentsoz/ees/raw/master/ees/scenarios/loddon-mallee-northern-cluster-shires/loddon_mallee_northern_cluster_shires_network.xml.gz"
 
 # Mount Alexander Shire network JSON
 build \
   "mount_alexander_shire_network" \
   "EPSG:28355" \
-  "https://github.com/agentsoz/ees/raw/master/scenarios/mount-alexander-shire/mount_alexander_shire_network_2018.xml.gz"
+  "https://github.com/agentsoz/ees/raw/master/ees/scenarios/mount-alexander-shire/mount_alexander_shire_network_2018.xml.gz"
 
 # Surf Coast Shire network JSON
 build \
   "surf_coast_shire_network" \
   "EPSG:32754" \
-  "https://github.com/agentsoz/ees/raw/master/scenarios/surf-coast-shire/surf_coast_shire_network.xml.gz"
+  "https://github.com/agentsoz/ees/raw/master/ees/scenarios/surf-coast-shire/surf_coast_shire_network.xml.gz"
