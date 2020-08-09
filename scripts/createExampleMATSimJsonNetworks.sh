@@ -26,7 +26,7 @@ function build() {
     printf "\nFound MATSim network ($dir/$name/$name.xml.gz) so will use it\n"
   fi
 
-  cmd="$matsim2esri -net $dir/$name/$name.xml.gz -outl $dir/$name/${name}L.shp -outp $dir/$name/${name}P.shp -crs 'EPSG:4326'"
+  cmd="$matsim2esri -net $dir/$name/$name.xml.gz -outl $dir/$name/${name}L.shp -outp $dir/$name/${name}P.shp -crs '$projection'"
   echo $cmd; eval $cmd
 
   printf "\nConverting MATSim network shapefiles ($dir/$name/*.shp) to GeoJSON now\n"
