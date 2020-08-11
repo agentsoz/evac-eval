@@ -1,5 +1,6 @@
 import os
 import gzip
+import urllib.request
 import xml.etree.ElementTree as ET
 import numpy as np
 from geostack.raster import Raster
@@ -9,22 +10,24 @@ from geostack import gs_enums
 from geostack.utils import get_epsg
 
 #TODO: make these command line arguments
-outdir='../data/sem/castlemaine-region/'
+outdir='../data/castlemaine-region/'
 
-popnFile='../scenarios/mount-alexander-shire/castlemaine-region/population-archetypes.xml.gz'
+popnFileUrl='https://github.com/agentsoz/ees/raw/dbfab224daaeb02294b5dabb62f55b5f8755b6ce/ees/scenarios/mount-alexander-shire/castlemaine-region-archetypes/population-archetypes.xml.gz'
+popnFile= outdir + 'abm/population-archetypes.xml.gz'
 popnEpsg='28355'
 popnActivityFilter='home'
-popnOutfile= outdir + 'population-archetypes.tif'
+popnOutfile= outdir + 'sem/population-archetypes.tif'
 popnRasterCellSize='10'
 
-firePhoenix4GridShp = '../data/20181109_mountalex_evac_ffdi100d_grid.shp'
-fireOutfile= outdir + '20181109_mountalex_evac_ffdi100d_grid.tif'
+firePhoenix4GridShpUrl='https://github.com/agentsoz/ees-data/raw/master/mount-alexander-shire/phoenix-shapefiles/20181109/Evac_Phoenix_runs/20181109_mountalex_evac_ffdi100d/20181109_mountalex_evac_ffdi100d_grid.shp'
+firePhoenix4GridShp = outdir + 'abm/20181109_mountalex_evac_ffdi100d_grid.shp'
+fireOutfile= outdir + 'sem/20181109_mountalex_evac_ffdi100d_grid.tif'
 fireRasterCellSize='10'
 
-networkFile='../scenarios/mount-alexander-shire/mount_alexander_shire_network_2018.xml.gz'
+networkFileUrl='https://github.com/agentsoz/ees/raw/dbfab224daaeb02294b5dabb62f55b5f8755b6ce/ees/scenarios/mount-alexander-shire/mount_alexander_shire_network_2018.xml.gz'
+networkFile= outdir + 'abm/mount_alexander_shire_network_2018.xml.gz'
 networkEpsg='28355'
-networkOutfilePrefix= outdir + 'mount_alexander_shire_network_2018'
-
+networkOutfilePrefix= outdir + 'sem/mount_alexander_shire_network_2018'
 
 # Parse args
 popnEpsg = get_epsg(int(popnEpsg))
@@ -33,7 +36,19 @@ networkEpsg = get_epsg(int(networkEpsg))
 
 # Create the output dir
 if not os.path.exists(outdir):
-    os.makedirs(outdir)
+    os.makedirs(outdir + "/abm")
+    os.makedirs(outdir + "/sem")
+
+# Download all files
+print("Downloading " + popnFileUrl + " to " + popnFile)
+urllib.request.urlretrieve(popnFileUrl, popnFile)
+print("Downloading " + networkFileUrl + " to " + networkFile)
+urllib.request.urlretrieve(networkFileUrl, networkFile)
+for ext in ['shp', 'prj', 'dbf', 'cpg']:
+    src = firePhoenix4GridShpUrl.replace('shp', ext)
+    dst = firePhoenix4GridShp.replace('shp', ext)
+    print("Downloading " + src + " to " + dst)
+    urllib.request.urlretrieve(src, dst)
 
 # Vectorise the MATSim network
 print("Reading MATSim network from " + networkFile)
