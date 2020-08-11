@@ -17,7 +17,7 @@ popnFile= outdir + 'abm/population-archetypes.xml.gz'
 popnEpsg='28355'
 popnActivityFilter='home'
 popnOutfile= outdir + 'sem/population-archetypes.tif'
-popnRasterCellSize='10'
+popnRasterCellSize='100'
 
 firePhoenix4GridShpUrl='https://github.com/agentsoz/ees-data/raw/master/mount-alexander-shire/phoenix-shapefiles/20181109/Evac_Phoenix_runs/20181109_mountalex_evac_ffdi100d/20181109_mountalex_evac_ffdi100d_grid.shp'
 firePhoenix4GridShp = outdir + 'abm/20181109_mountalex_evac_ffdi100d_grid.shp'
@@ -33,6 +33,7 @@ networkOutfilePrefix= outdir + 'sem/mount_alexander_shire_network_2018'
 popnEpsg = get_epsg(int(popnEpsg))
 popnRasterCellSize = int(popnRasterCellSize)
 networkEpsg = get_epsg(int(networkEpsg))
+epsg4326 = get_epsg(4326)
 
 # Create the output dir
 if not os.path.exists(outdir + "/abm"):
@@ -73,6 +74,10 @@ input.close()
 outfile = networkOutfilePrefix + ".nodes.shp"
 print("Writing " + outfile)
 vec.to_shapefile(outfile, gs_enums.GeometryType.Point)
+outfile = networkOutfilePrefix + ".nodes.geojson"
+print("Writing " + outfile)
+vec.convert(epsg4326)
+vec.to_geojson(outfile)
 
 print("Parsing network links into a vector")
 vec = vector.Vector()
@@ -85,6 +90,10 @@ input.close()
 outfile = networkOutfilePrefix + ".links.shp"
 print("Writing " + outfile)
 vec.to_shapefile(outfile, gs_enums.GeometryType.LineString)
+outfile = networkOutfilePrefix + ".links.geojson"
+print("Writing " + outfile)
+vec.convert(epsg4326)
+vec.to_geojson(outfile)
 
 # Rasterise the fire shapefile
 print("Loading Phoenix4 fire grid shapefile " + firePhoenix4GridShp)
@@ -108,9 +117,9 @@ for act in root.iter('activity'):
         vec.setProperty(pointIdx, "newproperty", "newstr")
 vec.setProjectionParameters(popnEpsg)
 input.close()
-print("Rasterising the home activity locations vector ( CRS size cells)")
+print("Rasterising the home activity locations vector")
 bounds = vec.getBounds()
-bounds.extend(0.05)
+bounds.extend(popnRasterCellSize)
 count = Raster(name="count", data_type=np.uint32)
 count.init_with_bbox(bounds, popnRasterCellSize)
 count.setProjectionParameters(popnEpsg)

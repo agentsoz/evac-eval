@@ -36,6 +36,8 @@ Then, from the command line (unix-based, or in the windows linux subsystem), fro
 rm -rf data && python ees2sem.py
 ```
 
-This will download the Castlemaine Region EES scenario files into a new temporary directory `./data/abm` and then convert them all to gssem compatible inputs in `./data/sem`.
+This will download the Castlemaine Region EES scenario files into a new temporary directory `./data/abm` and then convert them all to gssem compatible inputs in `./data/sem`. The output looks something like below in QGIS:
 
-The script `ees2sem.py` is self contained and portable. It can be copied to any functional geostack python environment and should just work out of the box. 
+![Example converted inputs](./doc/seminputs.png)
+
+The script `ees2sem.py` is portable. It can be copied to any functional geostack python environment and should just work out of the box.
