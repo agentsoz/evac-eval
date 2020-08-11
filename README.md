@@ -25,3 +25,17 @@ These were built using the instructions below:
 This scenario is available in [scenarios/mount-alexander-shire/castlemaine-region](scenarios/mount-alexander-shire/castlemaine-region).
 
 In this scenario, which is based on the EES [castlemaine-region-archetypes](https://github.com/agentsoz/ees/tree/master/scenarios/mount-alexander-shire/castlemaine-region-archetypes) scenario, the resident population of Castlemaine region (technically the 2016 Australian census population in statistical areas *Castlemaine SA2* and *Castlemaine Region SA2*) is evacuated in response to a Catastrophic (Code Red) fire to the northwest of Maldon. Details of the original scenario including a video of the simulation run are available [here](https://github.com/agentsoz/ees/blob/master/scenarios/mount-alexander-shire/castlemaine-region-archetypes/README.md#commit-495a7f8--9-sep-2019).
+
+## Converting EES inputs to GSSEM
+
+This can now be done completely using the geostack library (python binding). To get started, ensure that you have a functional geostack environment in conda as per the instructions [here](https://gitlab.com/geostack/library/-/wikis/Building-Python-packages).
+
+Then, from the command line (unix-based, or in the windows linux subsystem), from the current directory do:
+
+```
+rm -rf data && python ees2sem.py
+```
+
+This will download the Castlemaine Region EES scenario files into a new temporary directory `./data/abm` and then convert them all to gssem compatible inputs in `./data/sem`.
+
+The script `ees2sem.py` is self contained and portable. It can be copied to any functional geostack python environment and should just work out of the box. 
