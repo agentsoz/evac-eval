@@ -35,20 +35,24 @@ popnRasterCellSize = int(popnRasterCellSize)
 networkEpsg = get_epsg(int(networkEpsg))
 
 # Create the output dir
-if not os.path.exists(outdir):
+if not os.path.exists(outdir + "/abm"):
     os.makedirs(outdir + "/abm")
+if not os.path.exists(outdir + "/sem"):
     os.makedirs(outdir + "/sem")
 
 # Download all files
-print("Downloading " + popnFileUrl + " to " + popnFile)
-urllib.request.urlretrieve(popnFileUrl, popnFile)
-print("Downloading " + networkFileUrl + " to " + networkFile)
-urllib.request.urlretrieve(networkFileUrl, networkFile)
+if not os.path.exists(popnFile):
+    print("Downloading " + popnFileUrl + " to " + popnFile)
+    urllib.request.urlretrieve(popnFileUrl, popnFile)
+if not os.path.exists(networkFile):
+    print("Downloading " + networkFileUrl + " to " + networkFile)
+    urllib.request.urlretrieve(networkFileUrl, networkFile)
 for ext in ['shp', 'prj', 'dbf', 'cpg']:
     src = firePhoenix4GridShpUrl.replace('shp', ext)
     dst = firePhoenix4GridShp.replace('shp', ext)
-    print("Downloading " + src + " to " + dst)
-    urllib.request.urlretrieve(src, dst)
+    if not os.path.exists(dst):
+        print("Downloading " + src + " to " + dst)
+        urllib.request.urlretrieve(src, dst)
 
 # Vectorise the MATSim network
 print("Reading MATSim network from " + networkFile)
@@ -74,10 +78,8 @@ print("Parsing network links into a vector")
 vec = vector.Vector()
 for elem in root.iter('link'):
     line = [nodes[elem.attrib['from']], nodes[elem.attrib['to']]]
-    # FIXME: 'line' gets somethig like:
-    # [[259715.66711096585, 5926741.257714603], [259722.21628692746, 5926750.115245353]] but does not parse below
-    #lineIdx = vec.addLineString(line)
-    #vec.setProperty(lineIdx, "newproperty", "newstr")
+    lineIdx = vec.addLineString(line)
+    vec.setProperty(lineIdx, "newproperty", "newstr")
 vec.setProjectionParameters(networkEpsg)
 input.close()
 outfile = networkOutfilePrefix + ".links.shp"
