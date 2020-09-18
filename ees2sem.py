@@ -1,6 +1,5 @@
 import os
 import sys
-sys.path.append("/home/gar305/Documents/geostack/py_build/python/src")
 import gzip
 import urllib.request
 from argparse import ArgumentParser
