@@ -10,6 +10,7 @@ from geostack.vector import vector
 from geostack.vector import Vector
 from geostack import gs_enums
 from geostack.utils import get_epsg
+from geostack.runner import runScript
 
 def main(outdir):
     # #TODO: make these command line arguments
@@ -80,11 +81,12 @@ def main(outdir):
     vec.to_geojson(outfile)
 
     print("Parsing network links into a vector")
-    vec = vector.Vector()
+    # vec = vector.Vector()
     for elem in root.iter('link'):
         line = [nodes[elem.attrib['from']], nodes[elem.attrib['to']]]
         lineIdx = vec.addLineString(line)
         vec.setProperty(lineIdx, "newproperty", "newstr")
+        vec.setProperty(lineIdx, "diameter", 1.0)
     vec.setProjectionParameters(networkEpsg)
     input.close()
     outfile = networkOutfilePrefix + ".links.shp"
@@ -100,6 +102,8 @@ def main(outdir):
     vec = Vector.from_shapefile(firePhoenix4GridShp)
     print("Rasterising the fire vector")
     raster = vec.rasterise(fireRasterCellSize, "output = HOUR_BURNT;")
+    # convert hours to seconds
+    runScript("rasterised = rasterised * 3600.0;", [raster])
     print("Writing " + fireOutfile)
     raster.write(fireOutfile)
 
