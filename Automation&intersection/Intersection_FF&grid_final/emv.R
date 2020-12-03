@@ -46,7 +46,7 @@ gridfile %>%
 grid %>% as.data.frame() %>% head(5)
 
 # Replace hour burnt NA to zeros
-firefile %>% select(HOUR_BURNT,geometry, HOUR_SPOT)->ffile
+firefile %>% select(geometry, HL_PROB)->ffile
 
 
 #Set crs
@@ -62,8 +62,15 @@ ffile %>%
     st_as_sf(coords = c("Y_COORD","X_COORD"),crs=crs_epsg32754())%>%
     st_transform(crs=crs_epsg32754())->ffile_final
 
+ffile_final_area <- mutate(ffile_final, ffile_final_area = st_area(ffile_final))
+
+ffile_final_area %>% as.data.frame()
 #Intersection
-intersection = as.tibble(st_intersection(ffile_final,grid))
+intersection = as.tibble(st_intersection(grid,ffile_final))
+
+plot(grid$geometry, axes = TRUE)
+plot(ffile_final$geometry, add = TRUE, col = "white")
+plot(intersection$geometry, add = TRUE, col = 'red')
 
 #Calculate the area
 intersection$area <- st_area(intersection$geometry)
@@ -71,26 +78,34 @@ intersection$area <- st_area(intersection$geometry)
 #Groupby
 intersection %>% 
   as_tibble() %>% 
-  group_by(HOUR_BURNT, gridID,HOUR_SPOT) %>% 
-  summarize(.groups="keep", intersect_area = sum(area)) -> final_area_int
+  group_by(HOUR_BURNT, gridID) %>% 
+  summarize(intersect_area = sum(area)) -> final_area_int # werite a function to calculate a cumulitive sum 
 
-final_area_int %>% as.data.frame() 
+final_area_int %>% as.data.frame() %>% head(15)
+final_area_int %>% group_by(gridID) %>%  mutate(cum_area = cumsum(intersect_area)) %>% ungroup() %>% 
+  select(HOUR_BURNT, gridID, cum_area) ->filter_grid
+
+#filter_grid%>% as.data.frame()
+#final_area_int %>% group_by(gridID)%>% summarize(a = sum(intersect_area)) -> final_a
+
+filter_grid %>% as.data.frame()
 
 #Calculating the grid cell area
 grid_area <- mutate(grid, grid_area = st_area(grid))
+grid_area %>% as.data.frame() %>% head()
 
 #Merging two tables
-grid_final <- merge(grid_area, final_area_int, by = "gridID", all.y = TRUE)
+grid_final <- merge(grid_area, filter_grid, by = "gridID", all.y = TRUE)
 
 # Calculate the covergae area %
 grid_final <- grid_final %>% 
-   mutate(area_coverage = as.numeric(intersect_area/grid_area))
+   mutate(area_coverage = as.numeric(cum_area/grid_area))
 
 grid_final %>% as.data.frame() %>% head()
 
 #writing the file.
 inter <- sf_geojson(grid_final)
-geojson_write(inter, file = "grid_intersection.geojson")
+geojson_write(inter, file = "grid_intersection_cumulative.geojson")
 
 # # END
 
