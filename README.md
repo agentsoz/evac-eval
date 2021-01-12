@@ -7,7 +7,7 @@ The purpose of this work is to evaluate different bushfire evacuation models aga
 The models to be evaluated are:
 
 * Emergency Evacuation Simulator (EES) : https://github.com/agentsoz/ees
-* Geostack Steady State Evacuation Model (GSSEM) : https://gitlab.com/geostack/library/-/wikis/Geostack-example:-Steady-state-evacuation-model
+* Geostack Steady State Evacuation Model (GSSEM) : https://gitlab.com/geostack/library/-/wikis/home
 
 
 ## Build
@@ -16,7 +16,9 @@ For convenience binary builds of the models are provided in the [`./bin`](./bin)
 
 These were built using the instructions below:
 * **EES** is a Java application and complete build instructions (unix) are in the project's continuous integration [Travis script](https://github.com/agentsoz/ees/blob/master/.travis.yml).
-* **GSSEM** is a CPP application and build instructions are available for [Linux](https://gitlab.com/geostack/library/-/wikis/Building%20Geostack%20on%20Linux), [macOS](https://gitlab.com/geostack/library/-/wikis/Build-and-run-Geostack-on-macOS), and [Windows](https://gitlab.com/geostack/library/-/wikis/Building%20Python%20packages%20on%20Win64).
+* **GSSEM** is a CPP and Python application and the build instructions are available for [Linux](https://gitlab.com/geostack/library/-/wikis/Building-Geostack-on-Linux), [macOS](https://gitlab.com/geostack/library/-/wikis/Building-Geostack-on-macOS), and [Windows](https://gitlab.com/geostack/library/-/wikis/Building-Geostack-on-Windows).
+
+* GSSEM python application: The instructions to use GSSEM python application are available [Installing-Geostack-for-Python-using-conda](https://gitlab.com/geostack/library/-/wikis/Installing-Geostack-for-Python-using-conda) and the network flow solver is available to download [NetworkFlowSolver](https://gitlab.com/geostack-applications/applications/-/tree/master/networkFlow/python)
 
 ## Scenarios
 
