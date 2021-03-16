@@ -85,7 +85,7 @@ def main(outdir):
     for elem in root.iter('link'):
         line = [nodes[elem.attrib['from']], nodes[elem.attrib['to']]]
         lineIdx = vec.addLineString(line)
-        vec.setProperty(lineIdx, "newproperty", "newstr")
+        vec.setProperty(lineIdx, "matsim_linkID", elem.attrib['id'])
         vec.setProperty(lineIdx, "diameter", 1.0)
     vec.setProjectionParameters(networkEpsg)
     input.close()
