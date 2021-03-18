@@ -12,7 +12,7 @@ from geostack import gs_enums
 from geostack.utils import get_epsg
 from geostack.runner import runScript
 
-def main(outdir):
+def main(scenario, outdir):
     # #TODO: make these command line arguments
     # outdir='./data/castlemaine-region/'
 
@@ -25,13 +25,29 @@ def main(outdir):
 
     firePhoenix4GridShpUrl='https://github.com/agentsoz/ees-data/raw/master/mount-alexander-shire/phoenix-shapefiles/20181109/Evac_Phoenix_runs/20181109_mountalex_evac_ffdi100d/20181109_mountalex_evac_ffdi100d_grid.shp'
     firePhoenix4GridShp = outdir + 'abm/20181109_mountalex_evac_ffdi100d_grid.shp'
-    fireOutfile= outdir + 'sem/20181109_mountalex_evac_ffdi100d_grid.tif'
-    fireRasterCellSize='10'
 
-    networkFileUrl='https://github.com/agentsoz/ees/raw/dbfab224daaeb02294b5dabb62f55b5f8755b6ce/ees/scenarios/mount-alexander-shire/mount_alexander_shire_network_2018.xml.gz'
-    networkFile= outdir + 'abm/mount_alexander_shire_network_2018.xml.gz'
-    networkEpsg='28355'
-    networkOutfilePrefix= outdir + 'sem/mount_alexander_shire_network_2018'
+    # TODO: 
+    if scenario == 'Mount-Alexander-Shire':
+        fireOutfile= outdir + 'sem/20181109_mountalex_evac_ffdi100d_grid.tif'
+        fireRasterCellSize='10'
+    
+        networkFileUrl='https://github.com/agentsoz/ees/raw/dbfab224daaeb02294b5dabb62f55b5f8755b6ce/ees/scenarios/mount-alexander-shire/mount_alexander_shire_network_2018.xml.gz'
+        networkFile= outdir + 'abm/mount_alexander_shire_network_2018.xml.gz'
+        networkEpsg='28355'
+        networkOutfilePrefix= outdir + 'sem/mount_alexander_shire_network_2018'
+
+    elif scenario == 'Loddon-Mallee-Northern-Cluster-Shires':
+        fireOutfile= outdir + 'sem/20181109_loddonMalleeNorthernCluster_evac_ffdi100d_grid.tif'
+        fireRasterCellSize='10'
+    
+        networkFileUrl='https://github.com/agentsoz/ees/raw/dbfab224daaeb02294b5dabb62f55b5f8755b6ce/ees/scenarios/loddon-mallee-northern-cluster-shires/loddon_mallee_northern_cluster_shires_network.xml.gz'
+        networkFile= outdir + 'abm/loddon_mallee_northern_cluster_shires_network.xml.gz'
+        networkEpsg='28355'
+        networkOutfilePrefix= outdir + 'sem/loddon_mallee_northern_cluster_shires_network'
+
+    else:
+      print(f"Scenario '{scenario}' is unrecognised; terminating program.")
+      sys.exit()
 
     # Parse args
     popnEpsg = get_epsg(int(popnEpsg))
@@ -135,9 +151,11 @@ def main(outdir):
 if __name__ == "__main__":
     parser = ArgumentParser(description="script to convert vector and raster files using geostack")
     parser.add_argument("--outdir", dest="outdir", type=str, help="path to the output directory")
+#    parser.add_argument("--scenario", dest="scenario", type=str, default='Scenario not supplied', required=True, help="name of the scenario (choose from 'mount-alexander-shire' and 'loddon-mallee-northern-cluster-shires'")
+    parser.add_argument("--scenario", dest="scenario", type=str, required=True, help="name of the scenario (choose from 'Mount-Alexander-Shire' and 'Loddon-Mallee-Northern-Cluster-Shires'")
     args = parser.parse_args()
 
     if args.outdir is None:
         parser.print_help()
     else:
-        main(args.outdir)
+        main(args.scenario, args.outdir)
