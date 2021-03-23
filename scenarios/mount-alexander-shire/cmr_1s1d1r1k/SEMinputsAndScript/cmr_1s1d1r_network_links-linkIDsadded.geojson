@@ -549,6 +549,17 @@
     },
     {
       "type": "Feature",
+      "properties": {},
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          144.31692504882812,
+          -37.084617614746094
+        ]
+      }
+    },
+    {
+      "type": "Feature",
       "properties": {
         "diameter": 1,
         "matsim_linkID": "12426"
