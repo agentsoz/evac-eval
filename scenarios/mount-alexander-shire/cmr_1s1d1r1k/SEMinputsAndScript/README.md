@@ -16,7 +16,7 @@ conda config --add channels conda-forge
 conda config --append channels geostack  # need channel 'geostack' in order to install bindings ('geostack')
 # Before the following command, might need to install an OpenCL implementation with 'conda install pocl' or similar
 conda install --channel geostack geostack 
-git clone https://gitlab.com/geostack-applications/applications.git  # install networkFlow.py (runs the network-flow solver)
+git clone https://gitlab.com/geostack-applications/applications.git  # install networkFlow.py (runs network-flow solver)
 # [A sequence of the user's commands] 
 conda deactivate  # deactivate the current environment ('gsenv') if desired - not strictly necessary
 ```
