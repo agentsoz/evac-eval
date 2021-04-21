@@ -18,7 +18,7 @@ import json
 
 #meanVehicleLength_Km = .005  # these two shouldn't be global variables, so their definitions have been moved inside function 'setuptrafficflowproblem()'
 #meanMinGapinStoppedTraffic_Km = .004
-#EPS = 1e-3  # this shouldn't be a global variable, so its definition has been moved inside each of the functions 'adjustSpeedandDensityToLink()' and 'flowandspeedEnteringNode()'
+#EPS = 1e-3  # this shouldn't be a global variable, so its definition has been moved inside each of the functions 'adjustSpeedandDensityToLink()' and 'flowEnteringNode()'
 
 
 def phiOnLinkrs_inVehiclesPerKmPerLane( lK_rs, meanMinGapinStoppedTraffic_Km, meanVehicleLength_Km ):  # Calculate value of \phi_{rs} for link {r,s} given K_{rs} and two constants; 'meanMinGapinStoppedTraffic_Km' is the gap between the front of a car and the rear of the car immediately ahead of it
@@ -38,7 +38,7 @@ def phiOnLinkrs_inVehiclesPerKmPerLane( lK_rs, meanMinGapinStoppedTraffic_Km, me
   return currentApprox
 
 
-def geoJSONtoAdjacencyMatrix( JSONnetworkfilename ):
+def geoJSONtoAdjacencyMatrix( JSONnetworkfilename, exitnodes ):
   with open(JSONnetworkfilename, 'r') as f:
     jsonobj = json.load(f)
 #  print("jsonobj is", jsonobj)
@@ -92,13 +92,15 @@ def geoJSONtoAdjacencyMatrix( JSONnetworkfilename ):
     pluralIndicator = "s" if numDuplicateLinestrings > 1 else ""
     print(f"WARNING: {numDuplicateLinestrings} duplicate LineStrings ignored.")
     raise Exception(f"WARNING: {numDuplicateLinestrings} duplicate Linestring{pluralIndicator} ignored.")  # TODO: should probably comment out this line, but will wait for more testing to see whether the exception is ever raised
-  exitnodes = []
+#  exitnodes = []  # as of 16th April 2021, the previously-defined exit-nodes are an input-parameter to this function ('geoJSONtoAdjacencyMatrix')
   for l in linestringsWithCoords:  # add any missing Points at the ends of LineStrings
     for xy in l:
       if xy not in pointsWithCoords:
         print(f"Endpoint {xy} of LineString {l} is not in pointsWithCoords: adding it")
         pointsWithCoords[ xy ] = currentPointID
-        exitnodes.append( currentPointID )
+#        exitnodes.append( currentPointID )  # include the missing Point as an exit-node: all non-missing-point exit-nodes are already specified as a parameter of this function ('geoJSONtoAdjacencyMatrix')  # TODO: confirm that this is what is generally desired
+        exitnodes.add( currentPointID )  # include the missing Point as an exit-node: all non-missing-point exit-nodes are already specified as a parameter of this function ('geoJSONtoAdjacencyMatrix')  # TODO: confirm that this is what is generally desired
+        print(f"WARNING: including originally-missing endpoint {xy} of LineString {l} as an exit-node: exitnodes is now {exitnodes}")
         currentPointID += 1
       else:
 #        print(f"Point {xy} is in pointsWithCoords")
@@ -134,7 +136,7 @@ def geoJSONtoAdjacencyMatrix( JSONnetworkfilename ):
 
 
 #def setuptrafficflowproblem( JSONnetworkfilename, b0 ):
-def setuptrafficflowproblem( JSONnetworkfilename ):
+def setuptrafficflowproblem( JSONnetworkfilename, exitnodes ):
   terminatorPressure = 0.0  # pressure h at every exit-node, which can be either a leaf-node or not
   eps = 1e-12
 #  eps_flowbalance = 1e-3  # James Hilton's value
@@ -171,7 +173,7 @@ def setuptrafficflowproblem( JSONnetworkfilename ):
   meanVehicleLength_Km = .005
   meanMinGapinStoppedTraffic_Km = .004
 
-  (adjacency, exitnodes, pointcoordsbyID, linestringsWithCoords, lK, numlanes, linklength, linkcapacity, matsimlinkID, oneway) = geoJSONtoAdjacencyMatrix( JSONnetworkfilename )
+  (adjacency, exitnodes, pointcoordsbyID, linestringsWithCoords, lK, numlanes, linklength, linkcapacity, matsimlinkID, oneway) = geoJSONtoAdjacencyMatrix( JSONnetworkfilename, exitnodes )
   print("adjacency is", adjacency)
 #  leafnodes = np.sum(adjacency, axis=1) == 1  # np.sum(adjacency, axis=1) is row-wise sums of 'adjacency'
 #  print("leafnodes is", leafnodes)
@@ -223,15 +225,18 @@ def setuptrafficflowproblem( JSONnetworkfilename ):
 #    rhoC = {}  # density per lane at capacity
     tau = {}  # in terms of the notation on p. 94 of Treiber and Kesting, tau is numlanes * rho_C
 #    maximumdensityperlane = {}
-    maximumdensityperlane = 120.0  # in vehicles per kilometre per lane; a constant over all edges - this value taken from p. 93, 'Traffic Flow Dynamics' (2013) by Treiber and Kesting
+    maximumdensityperlane = 120.0  # in vehicles per kilometre per lane; a constant over all edges - this value taken from Table 8.1, p. 93, 'Traffic Flow Dynamics' (2013) by Treiber and Kesting
     print(f"maximumdensityperlane is {maximumdensityperlane:.4f}")
 #    T = 1.4 / 3600  # in hours; a constant over all edges - this value taken from p. 93 of Treiber and Kesting
 #    print(f"T is {T:.9f}")
     T = {}
     for edge in lK.keys():
+      # N.B. 'linkcapacity' is capacity flow over all lanes, NOT per lane. Similarly, 'tau' is the density over all lanes at capacity flow.
       T[edge] = numlanes[edge] / linkcapacity[edge] - 1/(lK[edge]*maximumdensityperlane)  # in hours; from eq. (8.15), p. 93 of Treiber and Kesting
 #      rhoC[edge] = 1 / (lK[edge] * T + 1/maximumdensityperlane)  # density per lane at capacity; from p. 94 of Treiber and Kesting
-      tau[edge] = numlanes[edge] / (lK[edge] * T[edge] + 1/maximumdensityperlane)  # density over entire link-width at capacity; from p. 94 of Treiber and Kesting
+#      tau[edge] = numlanes[edge] / (lK[edge] * T[edge] + 1/maximumdensityperlane)  # density over entire link-width at capacity; from eq. (8.16), p. 94 of Treiber and Kesting
+      tau[edge] = linkcapacity[edge] / lK[edge]  # density over entire link-width at capacity; from eq. (8.13), p. 93 of Treiber and Kesting, substituting Q=C/I and rho_{free} = tau/I
+      print(f"For edge {edge}, slope of free-flow part of triangular fundamental diagram is {linkcapacity[edge]/tau[edge]}; slope of congestion part of triangular fundamental diagram is {-linkcapacity[edge]/(maximumdensityperlane*numlanes[edge]-tau[edge])}.")
 #    argsflowfunc = {'hvalmax': hvalmax, 'lK': lK, 'tau': tau, 'linkcapacity': linkcapacity, 'linklength': linklength}
     argsflowfunc = {'lK': lK, 'tau': tau, 'linkcapacity': linkcapacity, 'linklength': linklength, 'numlanes': numlanes, 'maximumdensityperlane': maximumdensityperlane, 'T': T}
 
@@ -712,6 +717,8 @@ def fnorm(h, injectionnodes, indexamonginjectionorexitnodes, neighboursofj, exit
 #  congestiononlink = linkcongestion(r, s, qrs, abs(hr-hs), argsflowfunc)
 #  congestiononlink = linkcongestion(p, j, flowenteringparent, densityinlink, argsflowfunc)
 def linkcongestion(r, s, flow, density, argsflowfunc):
+  # The current measure of congestion, which is zero if the link's density is <= density at capacity and is the link's capacity less its actual flow otherwise, is problematic; for example, a link into which a congestion-zone has flowed upsttream might have very low flow only because its head-node has very low demand (i.e. injection-flow), and this will be measured to be high congestion. A better measure might follow from assessing congestion not on the links but at the injection-nodes, taking it to be the demand (injection-flow) less the total inflow into links of the network (noting that total inflow will be less than demand where one or more of the adjacent links has had its flow reduced by an upstream-propagating congestion-zone).
+  print(f"linkcongestion(): calculating congestion on link {frozenset({r,s})} from flow {flow} and density {density}...")
   humpdensity = argsflowfunc['tau'][frozenset({r,s})]
 #  print("tau[%s] is %.4f" % ((r,s), argsflowfunc['tau'][(r,s)]))
   print("tau[%s] is %.4f" % ((r,s), argsflowfunc['tau'][frozenset({r,s})]))
@@ -723,9 +730,9 @@ def linkcongestion(r, s, flow, density, argsflowfunc):
 #    linkcapacity = argsflowfunc['linkcapacity'][(r,s)]
     linkcapacity = argsflowfunc['linkcapacity'][frozenset({r,s})]
     congestiononlink = linkcapacity - abs(flow)
-#    print("flow is %.4f, congestiononlink is %.4f" % (flow, congestiononlink))
   else:
     congestiononlink = 0.0
+#  print("congestiononlink is %.4f" % congestiononlink)
   return congestiononlink
 
 def congestioninnetwork(hInjectionNodes, injectionnodes, indexamonginjectionorexitnodes, neighboursofj, exitnodes, hExitNodes, flowijfunc, flowfunc, b0, argsflowfunc):
@@ -980,7 +987,7 @@ def runsolver(NEWTONRAPHSON, N, injectionnodes, exitnodes, indexamonginjectionor
       try:
         dh = scipy.linalg.solve(A, b)
       except np.linalg.LinAlgError as e:
-        print("=========== WARNING: THE SOLUTION FAILS at iteration %d: np.linalg.LinAlgError exception raised. ========================" % iteration)
+        print("=========== ALERT: THE SOLUTION FAILS at iteration %d: np.linalg.LinAlgError exception raised. ========================" % iteration)
         return (e, None, None, False, iteration)  # e, hInjectionNodes, qij, flowbalanced
       print("dh is %s" % dh)
       h += dh  # if h falls outside the bounds if any, e.g. |h_i| <= 4 for flowfunc = 'concaveQuadratic', should h be adjusted to fall within the bounds? If so, should h be placed at the boundary or should it be "reflected" back within the bounds? (Probably the former, I imagine, as I don't know a way to justify "reflection," which might anyway cause the adjusted h to fall outside the bounds in the opposite direction.) But I believe that h will fall outside the bounds only if there is no root within the bounds for it to find, so adjusting h would merely delay the information that no root has been found.
@@ -988,10 +995,10 @@ def runsolver(NEWTONRAPHSON, N, injectionnodes, exitnodes, indexamonginjectionor
 #        dh_dot = scipy.linalg.norm( dh )  # incorrect?
         dh_dot = scipy.linalg.norm( dh )**2
       except ValueError as e:  # e.g., dh contains 'inf' or 'NaN'
-        print("=========== WARNING: THE SOLUTION FAILS at iteration %d: ValueError exception raised, perhaps by 'inf' or 'NaN'. ========================" % iteration)
+        print("=========== ALERT: THE SOLUTION FAILS at iteration %d: ValueError exception raised, perhaps by 'inf' or 'NaN'. ========================" % iteration)
         return (e, None, None, False, iteration)  # e, hInjectionNodes, qij, flowbalanced
       except OverflowError as e:  # e.g., (34, 'Numerical result out of range')
-        print("=========== WARNING: THE SOLUTION FAILS at iteration %d: OverflowError exception raised, perhaps because numerical result is out of range. ========================" % iteration)
+        print("=========== ALERT: THE SOLUTION FAILS at iteration %d: OverflowError exception raised, perhaps because numerical result is out of range. ========================" % iteration)
         return (e, None, None, False, iteration)  # e, hInjectionNodes, qij, flowbalanced
       print("dh_dot is %.5f" % dh_dot)
       print("h is %s" % h)
@@ -1011,7 +1018,7 @@ def runsolver(NEWTONRAPHSON, N, injectionnodes, exitnodes, indexamonginjectionor
     normsratio = dh_dot/dh0_dot
 #    if dh_dot/dh0_dot > eps_NRconvergence and iteration >= MAXITERS:
     if normsratio > eps_NRconvergence and iteration >= MAXITERS:
-      print("=========== WARNING: Newton-Raphson method has not converged: has reached maximum number (%d) of iterations without ||dh||^2 (%.12f) falling to %.4e * ||dh0||^2 (||dh0||^2 = %.5f); ||dh||^2/||dh0||^2 = %.6e" % (MAXITERS, dh_dot, eps_NRconvergence, dh0_dot, normsratio))
+      print("=========== ALERT: Newton-Raphson method has not converged: has reached maximum number (%d) of iterations without ||dh||^2 (%.12f) falling to %.4e * ||dh0||^2 (||dh0||^2 = %.5f); ||dh||^2/||dh0||^2 = %.6e" % (MAXITERS, dh_dot, eps_NRconvergence, dh0_dot, normsratio))
 #    if dh_dot/dh0_dot <= eps_NRconvergence:
     if normsratio <= eps_NRconvergence:
       print("Newton-Raphson method has converged, in that ||dh||^2 (%.12f) has fallen to no more than %.4e * ||dh0||^2 (||dh0||^2 = %.5f); ||dh||^2/||dh0||^2 = %.6e" % (dh_dot, eps_NRconvergence, dh0_dot, normsratio))
@@ -1089,9 +1096,9 @@ def runsolver(NEWTONRAPHSON, N, injectionnodes, exitnodes, indexamonginjectionor
 #  if abs(totaloutflow+totalinflow)/Qmax > 1.0e-3:
   if abs(totaloutflow+totalinflow)/Qabsmax > EPS_FLOWBALANCE:
     if NEWTONRAPHSON:
-      print("=========== WARNING: THE SOLUTION FAILS at iteration %d: flow does not balance over network. ========================" % iteration)
+      print("=========== ALERT: THE SOLUTION FAILS at iteration %d: flow does not balance over network. ========================" % iteration)
     else:
-      print("=========== WARNING: THE SOLUTION FAILS: flow does not balance over network. ========================")
+      print("=========== ALERT: THE SOLUTION FAILS: flow does not balance over network. ========================")
 #    flowbalanced = 'flow does not balance over network'
     flowbalanced = False
   else:
@@ -1182,8 +1189,9 @@ def adjustSpeedandDensityToLink( flowfunction, p, j, densityenteringparent, args
 #  elif flowfunc == 'triangular':
 #    humpdensity = numlanes*argsflowfunc['rhoC'][frozenset({p,j})]
   humpdensity = argsflowfunc['tau'][frozenset({p,j})]
-  if densityinlink >= humpdensity:
-    print(f"WARNING: density in link {{{p},{j}}} of {densityinlink:.3f} is over the hump {humpdensity:.3f}.")
+#  if densityinlink >= humpdensity:
+  if densityinlink > humpdensity:
+    print(f"WARNING: density in link {{{p},{j}}} of {densityinlink:.6f} is over the hump {humpdensity:.6f} by a gap of {(densityinlink-humpdensity):.6e}.")
   # Iterate until speedinlink converges:
   CALCULATESPEEDBEFOREDENSITY = True
 #  CALCULATESPEEDBEFOREDENSITY = False
@@ -1238,92 +1246,618 @@ def adjustSpeedandDensityToLink( flowfunction, p, j, densityenteringparent, args
   return (speedinlink, densityinlink, numiterations)
 
 
-def flowandspeedEnteringNode( j, parentsOnShortestPathsFromInjectionNodes, qij, congestionij, densityij, speedij, argsflowfunc, exitnodes, b0, indexamonginjectionorexitnodes, v0, shortestPathToAnExit, flowijfunc, flowfunc ):
-  # Traffic injected at a node flows towards the next node on its shortest path towards an exit. At the beginning of the first link the flow and speed are known, which gives the density; for traffic flowing into the link this density gives, according to v = v(rho) for the link, the speed in the link. The flow is conserved between each injection-node and the end of the first link on its shortest path to an exit; if a link is divided for numerical reasons into sub-sections, then the flow is conserved between adjacent sections.
+def densityonfreeflowbranchoftriangularfundamentaldiagram( freeflow, edge, argsflowfunc ):
+  freespeed = argsflowfunc['lK'][edge]
+  return freeflow / freespeed  # density over entire link-width; from eq. (8.13), p. 94 of Treiber and Kesting, substituting Q=q_tot/I and rho_{free} = rho_tot/I
+
+
+def densityoncongestedbranchoftriangularfundamentaldiagram( congestedflow, edge, argsflowfunc ):
+  T = argsflowfunc['T'][edge]
+  numlanes = argsflowfunc['numlanes'][edge]
+  maximumdensityperlane = argsflowfunc['maximumdensityperlane']
+  return numlanes * (1 - T*congestedflow/numlanes) * maximumdensityperlane
+
+
+def propagationSpeedOfShockFront( upstreamflow, upstreamdensity, downstreamflow, downstreamdensity ):
   EPS = 1e-3
-#  print(f"Entering flowandspeedEnteringNode( {j}, parentsOnShortestPathsFromInjectionNodes )")
-  print(f"Entering flowandspeedEnteringNode( {j}, ... ):")
-  if j in exitnodes:
-    print(f"Node {j} is an exit-node, so has zero injection-flow and -density, and injection-speed is undefined")
-#    print(f"{j} is an exit-node, so has zero injection-flow and injection-speed is undefined.")
-    injectionflow = injectiondensity = 0.0
-    injectionspeed = 'undefined'
-    print(f"At node {j} injectionflow is {injectionflow:.3f}, injectionspeed is {injectionspeed}, and injectiondensity is {injectiondensity:.3f}.")
+  assert abs(downstreamdensity - upstreamdensity) > EPS
+  return (downstreamflow - upstreamflow) / (downstreamdensity - upstreamdensity)
+
+
+def propagateSEM3congestionUpstreamToParents( i, totalflowleavingnodeiDownstreamOfCongestion, parentsOnShortestPathsFromInjectionNodes, qij, densityij, speedij, argsflowfunc, injectionnodes, b0, indexamonginjectionorexitnodes ):
+  print(f"totalflowleavingnodeiDownstreamOfCongestion at node {i} is {totalflowleavingnodeiDownstreamOfCongestion}")
+  initialtotalflowEnteringNodeiFromItsParents = sum([qij[p, i] for p in parentsOnShortestPathsFromInjectionNodes[i]])
+  print(f"Initial total flow entering node {i} from its parent-nodes is {initialtotalflowEnteringNodeiFromItsParents:.3f}")
+  totalflowEnteringNodei = 0.0
+  if i in injectionnodes:
+    injectionflowati = b0[indexamonginjectionorexitnodes[i]]
+    if injectionflowati > 0.0:
+      print(f"Adding to totalflowEnteringNodei the injectionflow at node {i} of {injectionflowati:.5f}")
+    totalflowEnteringNodei += injectionflowati
+  for p in parentsOnShortestPathsFromInjectionNodes[i]:
+##    qij[p, i] *= totalflowleavingnodeiDownstreamOfCongestion / initialtotalflowEnteringNodei  # divide congested flow between the links entering node i: the flow in each decreases proportionally  # TODO: improve this if not realistic, or find a better method in the literature
+#    qij[p, i] *= (totalflowleavingnodeiDownstreamOfCongestion - injectionflowati) / initialtotalflowEnteringNodeiFromItsParents  # divide congested flow between the links entering node i: the flow in each decreases proportionally  # TODO: improve this if not realistic, or find a better method in the literature
+#    congestedflowpi = qij[p, i]
+    initialflowpi = qij[p, i]
+    print(f"initial flow[{p}, {i}] is {initialflowpi}")
+    if initialflowpi == 0.0:  # no need to consider a parent-link that has no incoming flow, as congestion can't affect it  # FIXME: should check for closeness to zero of flow's absolute value
+      print(f"initialflowpi of {initialflowpi} is zero, which cannot be reduced by congestion: there is no real congestion in link ({p}, {i}).")
+      continue
+#    congestedflowpi = qij[p, i] * (totalflowleavingnodeiDownstreamOfCongestion - injectionflowati) / initialtotalflowEnteringNodeiFromItsParents  # divide congested flow between the links entering node i: the flow in each decreases proportionally  # TODO: improve this if not realistic, or find a better method in the literature
+    congestedflowpi = qij[p, i] * totalflowleavingnodeiDownstreamOfCongestion / (initialtotalflowEnteringNodeiFromItsParents + injectionflowati)  # divide congested flow between the links entering node i: the flow in each link, and also by implication the injection-flow, decreases proportionally  # TODO: improve this if not realistic, or find a better method in the literature
+    print(f"congested flow[{p}, {i}] is {congestedflowpi}")
+    print(f"As congestion-zone propagates upstream, flow in link [{p}, {i}] decreases from {initialflowpi} to {congestedflowpi}")
+    qij[p, i] = congestedflowpi
+    totalflowEnteringNodei += congestedflowpi
+    edge = frozenset({p, i})
+#    densityij[frozenset({p, i})] = densityoncongestedbranchoftriangularfundamentaldiagram( qij[p, i], edge, argsflowfunc )
+    congesteddensitypi = densityoncongestedbranchoftriangularfundamentaldiagram( congestedflowpi, edge, argsflowfunc )
+    densityij[edge] = congesteddensitypi
+    print(f"densityij IS NOW {densityij}")
+    upstreamfreeflowpi = initialflowpi
+    upstreamfreedensitypi = densityonfreeflowbranchoftriangularfundamentaldiagram( upstreamfreeflowpi, edge, argsflowfunc )
+    print(f"Calculating propagation-speed: upstreamfreeflowpi is {upstreamfreeflowpi}, upstreamfreedensitypi is {upstreamfreedensitypi}, congestedflowpi is {congestedflowpi}, congesteddensitypi is {congesteddensitypi}")
+    shockFrontPropagationSpeed = propagationSpeedOfShockFront( upstreamfreeflowpi, upstreamfreedensitypi, congestedflowpi, congesteddensitypi )
+    if shockFrontPropagationSpeed < 0.0:
+      upordownstreamText = 'travels upstream'
+    elif shockFrontPropagationSpeed > 0.0:
+      upordownstreamText = 'travels downstream'
+    else:
+      upordownstreamText = 'is stationary'
+    print(f"shockFrontPropagationSpeed is {shockFrontPropagationSpeed}: the front {upordownstreamText}.")
+#    assert shockFrontPropagationSpeed < 0.0
+    if shockFrontPropagationSpeed == 0.0:  # can be zero if, for example, the link's free flow upstream of the shock-front is zero, as then the "congested" flow is also zero
+      print(f"upstreamfreeflowpi {upstreamfreeflowpi} = congestedflowpi {congestedflowpi}: there is no real congestion.")
+#    speedij[frozenset({p, i})] = qij[p, i] / densityij[edge]
+    speedij[edge] = congestedflowpi / congesteddensitypi
+    print(f"Density in link {edge} is now {densityij[edge]}, speed is now {speedij[edge]}.")
+    propagateSEM3congestionUpstreamToParents( p, congestedflowpi, parentsOnShortestPathsFromInjectionNodes, qij, densityij, speedij, argsflowfunc, injectionnodes, b0, indexamonginjectionorexitnodes )
+
+  if totalflowleavingnodeiDownstreamOfCongestion < totalflowEnteringNodei:
+#    print(f"ALERT: totalflowEnteringNodei of {totalflowEnteringNodei} not equal to totalflowleavingnodeiDownstreamOfCongestion of {totalflowleavingnodeiDownstreamOfCongestion}.")
+    print(f"ALERT: at node {i}, totalflowleavingnodeiDownstreamOfCongestion {totalflowleavingnodeiDownstreamOfCongestion} < totalflowEnteringNodei {totalflowEnteringNodei}: node {i} must be an injection-node, and there is a shock where traffic-flow enters the network there.")
+    assert i in injectionnodes
+#  assert totalflowEnteringNodei == totalflowleavingnodeiDownstreamOfCongestion
+  assert totalflowleavingnodeiDownstreamOfCongestion <= totalflowEnteringNodei
+
+
+#def propagateSEM4congestionUpstreamToParents( upstreamPropagatingShockFront, a, p, congestedFlowThatHasPropagatedUpstreamToNodea, parentsOnShortestPathsFromInjectionNodes, qij, densityij, speedij, argsflowfunc, injectionnodes, b0, indexamonginjectionorexitnodes ):
+def propagateSEM4congestionUpstreamToParents( upstreamPropagatingShockFront, a, timeThatShockFrontReachedNodea, parentsOnShortestPathsFromInjectionNodes, qij, densityij, speedij, flowstateijatnodej, argsflowfunc, injectionnodes, b0, indexamonginjectionorexitnodes, propagatingwavefronts, nexttimestepduration ):
+  EPS = 1e-3
+  congestedFlowThatHasPropagatedUpstreamToNodea = upstreamPropagatingShockFront['flow']
+  print(f"congestedFlowThatHasPropagatedUpstreamToNodea to node {a} is {congestedFlowThatHasPropagatedUpstreamToNodea}")
+  initialtotalflowEnteringNodeaFromItsParents = sum([qij[p, a] for p in parentsOnShortestPathsFromInjectionNodes[a]])
+  print(f"Initial total flow entering node {a} from its parent-nodes is {initialtotalflowEnteringNodeaFromItsParents:.3f}")
+  newtotalflowEnteringNodea = 0.0  # will include the injection-flow at a, if any
+  if a in injectionnodes:
+    injectionflowata = b0[indexamonginjectionorexitnodes[a]]
+    if injectionflowata > 0.0:
+      print(f"Adding to newtotalflowEnteringNodea the injectionflow at node {a} of {injectionflowata:.5f}")
+    newtotalflowEnteringNodea += injectionflowata
+  for p in parentsOnShortestPathsFromInjectionNodes[a]:
+    initialflowpa = qij[p, a]
+    print(f"initial flow[{p}, {a}] is {initialflowpa}")
+    if initialflowpa == 0.0:  # no need to consider a parent-link that has no incoming flow, as congestion can't affect it  # FIXME: should check for closeness to zero of flow's absolute value
+      print(f"initialflowpa of {initialflowpa} is zero, which cannot be reduced by congestion: there is no real congestion in link ({p}, {a}).")
+      continue
+    congestedflowpa = initialflowpa * congestedFlowThatHasPropagatedUpstreamToNodea / (initialtotalflowEnteringNodeaFromItsParents + injectionflowata)  # divide congested flow between the links entering node a: the flow in each link, and also by implication the injection-flow, decreases proportionally  # TODO: improve this if not realistic, or find a better method in the literature
+    print(f"congested flow[{p}, {a}] is {congestedflowpa}")
+    print(f"As congestion-zone propagates upstream, flow in link [{p}, {a}] decreases from {initialflowpa} to {congestedflowpa}")
+    qij[p, a] = congestedflowpa
+    newtotalflowEnteringNodea += congestedflowpa
+    edge = frozenset({p, a})
+    congesteddensitypa = densityoncongestedbranchoftriangularfundamentaldiagram( congestedflowpa, edge, argsflowfunc )
+    densityij[edge] = congesteddensitypa
+    print(f"densityij is now {densityij}")
+    upstreamflowpa = initialflowpa
+    if flowstateijatnodej[p, a] == 'freeflowstate':
+      upstreamdensitypa = densityonfreeflowbranchoftriangularfundamentaldiagram( upstreamflowpa, edge, argsflowfunc )
+    elif flowstateijatnodej[p, a] == 'congestedflowstate':
+      upstreamdensitypa = densityoncongestedbranchoftriangularfundamentaldiagram( upstreamflowpa, edge, argsflowfunc )
+    print(f"Calculating propagation-speed: upstreamflowpa is {upstreamflowpa}, upstreamdensitypa is {upstreamdensitypa}, congestedflowpa is {congestedflowpa}, congesteddensitypa is {congesteddensitypa}")
+    shockFrontPropagationSpeed = propagationSpeedOfShockFront( upstreamflowpa, upstreamdensitypa, congestedflowpa, congesteddensitypa )
+    if shockFrontPropagationSpeed < 0.0:
+      upordownstreamText = 'travels upstream'
+    elif shockFrontPropagationSpeed > 0.0:
+      upordownstreamText = 'travels downstream'
+    else:
+      upordownstreamText = 'is stationary'
+    print(f"shockFrontPropagationSpeed is {shockFrontPropagationSpeed}: the front {upordownstreamText}.")
+    assert shockFrontPropagationSpeed < 0.0
+    if shockFrontPropagationSpeed == 0.0:  # can be zero if, for example, the link's free flow upstream of the shock-front is zero, as then the "congested" flow is also zero
+      print(f"upstreamflowpa {upstreamflowpa} = congestedflowpa {congestedflowpa}: there is no real congestion.")
+#    speedij[frozenset({p, a})] = qij[p, a] / densityij[edge]
+    speedij[edge] = congestedflowpa / congesteddensitypa
+    flowstateijatnodej[p, a] = 'congestedflowstate'
+    print(f"Density in link {edge} is now {densityij[edge]}, speed is now {speedij[edge]}, flowstateijatnodej[{p}, {a}] is {flowstateijatnodej[p, a]}.")
+    lengthoflinkpa = argsflowfunc['linklength'][ frozenset({p,a}) ]
+    timetillupstreamnodeonlink = -lengthoflinkpa / shockFrontPropagationSpeed
+##    propagateSEM3congestionUpstreamToParents( p, congestedflowpa, parentsOnShortestPathsFromInjectionNodes, qij, densityij, speedij, argsflowfunc, injectionnodes, b0, indexamonginjectionorexitnodes )
+    propagatingwavefronts.append( {'time': timeThatShockFrontReachedNodea, 'currentlink': frozenset({p,a}), 'sourcenodeonlink': a, 'destinationnodeonlink': p, 'distancereacheddownlink': 0.0, 'speed': -shockFrontPropagationSpeed, 'flow': congestedflowpa, 'density': congesteddensitypa, 'timetilldestinationnodeonlink': lengthoflinkpa/(-shockFrontPropagationSpeed), 'nodesonpathtoanexit': 'upstream-propagating shock-front, so not applicable', 'flowaheadofwavefront': upstreamflowpa, 'densityaheadofwavefront': upstreamdensitypa} )
+
+  upstreamPropagatingShockFront['timetilldestinationnodeonlink'] = 0.0
+  upstreamPropagatingShockFront['distancereacheddownlink'] += upstreamPropagatingShockFront['speed'] * nexttimestepduration
+  sourceNodeOfShockFront = upstreamPropagatingShockFront['sourcenodeonlink']
+  lengthofcurrentlink = argsflowfunc['linklength'][ frozenset({sourceNodeOfShockFront, a}) ]
+  assert abs(upstreamPropagatingShockFront['distancereacheddownlink'] - lengthofcurrentlink) <= EPS
+  print(f"As it propagates upstream at node {a}, wave-front {upstreamPropagatingShockFront} is removed from propagatingwavefronts.")
+  propagatingwavefronts.remove( upstreamPropagatingShockFront )
+  print(f"propagatingwavefronts is {propagatingwavefronts}")
+
+  if congestedFlowThatHasPropagatedUpstreamToNodea < newtotalflowEnteringNodea:
+#    print(f"ALERT: newtotalflowEnteringNodea of {newtotalflowEnteringNodea} not equal to congestedFlowThatHasPropagatedUpstreamToNodea of {congestedFlowThatHasPropagatedUpstreamToNodea}.")
+    print(f"ALERT: at node {a}, congestedFlowThatHasPropagatedUpstreamToNodea {congestedFlowThatHasPropagatedUpstreamToNodea} < newtotalflowEnteringNodea {newtotalflowEnteringNodea}: node {a} must be an injection-node, and there is a shock where traffic-flow enters the network there.")
+    assert a in injectionnodes
+#  assert newtotalflowEnteringNodea == congestedFlowThatHasPropagatedUpstreamToNodea
+  assert congestedFlowThatHasPropagatedUpstreamToNodea <= newtotalflowEnteringNodea
+
+
+#def flowandspeedEnteringNode( i, parentsOnShortestPathsFromInjectionNodes, qij, congestionij, densityij, speedij, argsflowfunc, exitnodes, b0, indexamonginjectionorexitnodes, v0, shortestPathToAnExit, flowijfunc, flowfunc ):
+def flowEnteringNode( i, childofi, parentsOnShortestPathsFromInjectionNodes, qij, densityij, speedij, argsflowfunc, exitnodes, b0, indexamonginjectionorexitnodes, shortestPathToAnExit, flowijfunc, flowfunc, injectionnodes ):
+  # Traffic injected at a node flows towards the next node on its shortest path towards an exit.
+#  # At the beginning of the first link the flow and speed are known, which gives the density; for traffic flowing into the link this density gives, according to v = v(rho) for the link, the speed in the link. The flow is conserved between each injection-node and the end of the first link on its shortest path to an exit; if a link is divided for numerical reasons into sub-sections, then the flow is conserved between adjacent sections.
+  # At an injection-node the inflow is known; this divides among any adjacent links that are used by shortest paths, and the portion of flow on each such link gives its density, on the free-flow side of its triangular fundamental diagram; the speed is the link's free speed V0 (see Figure 8.9, p. 92 of Treiber and Kesting).
+  EPS = 1e-3
+  print(f"Entering flowEnteringNode( {i}, ... ):")
+  if i in exitnodes:
+#    print(f"Node {i} is an exit-node, so has zero injection-flow and -density, and injection-speed is undefined.")
+    print(f"Node {i} is an exit-node, so has zero injection-flow.")
+#    injectionflow = injectiondensity = 0.0
+    injectionflow = 0.0
+##    injectionspeed = 'undefined'
+##    print(f"At node {i} injectionflow is {injectionflow:.3f}, injectionspeed is {injectionspeed}, and injectiondensity is {injectiondensity:.3f}.")
+#    print(f"At node {i} injectionflow is {injectionflow:.3f}.")
   else:
-    injectionflow = b0[indexamonginjectionorexitnodes[j]]
+    injectionflow = b0[indexamonginjectionorexitnodes[i]]
     print(f"injectionflow is {injectionflow:.5f}")
-    injectionspeed = v0[indexamonginjectionorexitnodes[j]]
-#    print(f"injectionspeed is {injectionspeed:.5f}")
-    print(f"injectionspeed is {injectionspeed}")
-    injectiondensity = injectionflow / injectionspeed
-#    print(f"injectiondensity is {injectiondensity:.5f}")
-    print(f"injectiondensity is {injectiondensity}")
-    print(f"At node {j} injectionflow is {injectionflow:.3f} and injectionspeed is {injectionspeed:.3f}, so injectiondensity is {injectiondensity:.3f}.")
+#    injectionspeed = v0[indexamonginjectionorexitnodes[i]]
+    speedinlinkofinjectedflow = argsflowfunc['lK'][frozenset({i,childofi})]
+#    print(f"speedinlinkofinjectedflow is {speedinlinkofinjectedflow:.5f}")
+    print(f"speed in link [{i}, {childofi}] of injected flow is {speedinlinkofinjectedflow}")
+#    injectiondensity = injectionflow / speedinlinkofinjectedflow
+##    print(f"injectiondensity is {injectiondensity:.5f}")
+#    print(f"injectiondensity is {injectiondensity}")
+#    print(f"At node {i} injectionflow is {injectionflow:.3f} and speedinlinkofinjectedflow is {speedinlinkofinjectedflow:.3f}, so injectiondensity is {injectiondensity:.3f}.")
+    print(f"At node {i} injectionflow is {injectionflow:.3f} and speedinlinkofinjectedflow is {speedinlinkofinjectedflow:.3f}.")
 
-  if parentsOnShortestPathsFromInjectionNodes[j] == set():
-    print(f"Node {j} has no parent-nodes on shortest paths from injection-nodes.")  # N.B. node j might be an exit-node with no flow entering it
-    if j in exitnodes:
-      print(f"Node {j} is an exit-node, so should have zero injection-flow and injection-speed")
+  if parentsOnShortestPathsFromInjectionNodes[i] == set():
+    print(f"Node {i} has no parent-nodes on shortest paths from injection-nodes.")  # N.B. node i might be an exit-node with no flow entering it
+    if i in exitnodes:
+      print(f"Node {i} is an exit-node, so should have zero injection-flow and injection-speed")
       assert injectionflow == 0.0
-      assert injectionspeed == 0.0
-      print(f"Node {j} is an exit-node; returning injection-flow {injectionflow:.3f} and injection-speed {injectionspeed:.3f}")
-      return injectionflow, injectionspeed
-    print(f"Node {j} is an injection-node; returning injection-flow {injectionflow:.3f} and injection-speed {injectionspeed:.3f}")
-    return injectionflow, injectionspeed
+      assert speedinlinkofinjectedflow == 0.0
+#      print(f"Node {i} is an exit-node; returning injection-flow {injectionflow:.3f} and speed in link of injected flow {speedinlinkofinjectedflow:.3f}")
+      print(f"Node {i} is an exit-node; returning injection-flow {injectionflow:.3f}")
+#      return injectionflow, speedinlinkofinjectedflow
+      return injectionflow
+#    print(f"Node {i} is an injection-node; returning injection-flow {injectionflow:.3f} and speed in link of injected flow {speedinlinkofinjectedflow:.3f}")
+    print(f"Node {i} is an injection-node; returning injection-flow {injectionflow:.3f}")
+#    return injectionflow, speedinlinkofinjectedflow
+    return injectionflow
 
-  # Node j has at least one parent-node on shortest paths from injection-nodes:
+  # Node i has at least one parent-node on shortest paths from injection-nodes:
   totalflow = injectionflow  # total flow so far: flows from parent-nodes will be added to this
-  totaldensity = injectiondensity  # vehicles per longitudinal metre of road, no matter how many lanes it has laterally
-  speedsinlinks = []  # store speeds in all links flowing into j
-  print(f"Node {j}'s parent-nodes on shortest paths from injection-nodes are {parentsOnShortestPathsFromInjectionNodes[j]}")
-  for p in parentsOnShortestPathsFromInjectionNodes[j]:
-    flowenteringparent, speedenteringparent = flowandspeedEnteringNode( p, parentsOnShortestPathsFromInjectionNodes, qij, congestionij, densityij, speedij, argsflowfunc, exitnodes, b0, indexamonginjectionorexitnodes, v0, shortestPathToAnExit, flowijfunc, flowfunc )
-    densityenteringparent = flowenteringparent / speedenteringparent
+#  totaldensity = injectiondensity  # vehicles per longitudinal metre of road, no matter how many lanes it has laterally
+#  speedsinlinks = []  # store speeds in all links flowing into i
+  print(f"Node {i}'s parent-nodes on shortest paths from injection-nodes are {parentsOnShortestPathsFromInjectionNodes[i]}")
+  for p in parentsOnShortestPathsFromInjectionNodes[i]:
+##    flowenteringparent, speedenteringparent = flowandspeedEnteringNode( p, parentsOnShortestPathsFromInjectionNodes, qij, congestionij, densityij, speedij, argsflowfunc, exitnodes, b0, indexamonginjectionorexitnodes, v0, shortestPathToAnExit, flowijfunc, flowfunc )
+#    flowenteringparent, speedenteringparent = flowandspeedEnteringNode( p, i, parentsOnShortestPathsFromInjectionNodes, qij, congestionij, densityij, speedij, argsflowfunc, exitnodes, b0, indexamonginjectionorexitnodes, shortestPathToAnExit, flowijfunc, flowfunc )
+    flowenteringparent = flowEnteringNode( p, i, parentsOnShortestPathsFromInjectionNodes, qij, densityij, speedij, argsflowfunc, exitnodes, b0, indexamonginjectionorexitnodes, shortestPathToAnExit, flowijfunc, flowfunc, injectionnodes )
+#    densityenteringparent = flowenteringparent / speedenteringparent
 #    print(f"Node {p} has closest exit-node {closestExit[p]}, at distance {shortestDistanceToAnExit[p]:.4f} with shortest path {shortestPathToAnExit[p]}")
-#    print(f"p is {p}, j is {j}")
-    assert j == shortestPathToAnExit[p][1]
-    linkcapacity = argsflowfunc['linkcapacity'][frozenset({p,j})]
+#    print(f"p is {p}, i is {i}")
+    assert i == shortestPathToAnExit[p][1]  # i is the next node in the shortest path from p to an exit-node
+    linkcapacity = argsflowfunc['linkcapacity'][frozenset({p,i})]
     if flowenteringparent > linkcapacity:
       # TODO: is it physically realistic to have traffic-flow in excess of the link-capacity use a different route to an exit, perhaps a second-shortest path? Note there might be several different paths all with the shortest length.
-      print(f"ALERT: entering-flow of {flowenteringparent:.1f} is too high for link ({p}, {j}) which has a capacity of {linkcapacity:.3f}; high congestion and density, and low speed, will result.")
-    print(f"The total inflow at node {p} of {flowenteringparent:.3f} veh/hr starts to flow towards node {j} with density {densityenteringparent:.3f} veh/km and speed v0={speedenteringparent:.3f} km/hr.")
-    flowfunction = flowijfunc[flowfunc]
-    (speedinlink, densityinlink, numiterations) = adjustSpeedandDensityToLink( flowfunction, p, j, densityenteringparent, argsflowfunc, flowenteringparent, speedenteringparent )
-    print(f"After {numiterations} iterations, the speed adjusts to {speedinlink:.3f} km/hr and density to {densityinlink:.3f}.")
-    qij[p, j] = flowenteringparent
-    densityij[frozenset({p, j})] = densityinlink
-    speedij[frozenset({p, j})] = speedinlink
-    if flowenteringparent > linkcapacity:
+#      print(f"WARNING: entering-flow of {flowenteringparent:.1f} is too high for link ({p}, {i}) which has a capacity of {linkcapacity:.3f}; high congestion and density, and low speed, will result.")
+      print(f"WARNING: entering-flow of {flowenteringparent:.1f} is too high for link ({p}, {i}) which has a capacity of {linkcapacity:.3f}: the link will have flow at this capacity, while a congestion-zone will propagate up the upstream link(s); the congestion-zone will have density to the right of the hump in its link's flow-function, and correspondingly low speed.")
+      flowleavingparent = linkcapacity
+      densityleavingparent = argsflowfunc['tau'][frozenset({p,i})]
+      speedleavingparent = flowleavingparent / densityleavingparent
+#      for gp in parentsOnShortestPathsFromInjectionNodes[p]:
+      propagateSEM3congestionUpstreamToParents( p, flowleavingparent, parentsOnShortestPathsFromInjectionNodes, qij, densityij, speedij, argsflowfunc, injectionnodes, b0, indexamonginjectionorexitnodes )
+    else:  # entering flow is not above capacity
+      flowleavingparent = flowenteringparent
+      speedleavingparent = argsflowfunc['lK'][frozenset({p,i})]
+      densityleavingparent = flowleavingparent / speedleavingparent
+
+    print(f"The total outflow at node {p} of {flowleavingparent:.3f} veh/hr starts to flow towards node {i} with density {densityleavingparent:.3f} veh/km and speed v0={speedleavingparent:.3f} km/hr.")
+    assert densityleavingparent * speedleavingparent == flowleavingparent
+#    flowfunction = flowijfunc[flowfunc]
+#    (speedinlink, densityinlink, numiterations) = adjustSpeedandDensityToLink( flowfunction, p, i, densityenteringparent, argsflowfunc, flowenteringparent, speedenteringparent )
+#    print(f"After {numiterations} iterations, the speed adjusts to {speedinlink:.3f} km/hr and density to {densityinlink:.3f}.")
+    (speedinlink, densityinlink) = (speedleavingparent, densityleavingparent)
+    qij[p, i] = flowleavingparent
+    densityij[frozenset({p, i})] = densityinlink
+    print(f"AFTER DEFINING densityij[frozenset({{{p}, {i}}})], densityij is {densityij}")
+    speedij[frozenset({p, i})] = speedinlink
+#    if flowleavingparent > linkcapacity:
+##      assert abs(speedinlink) < 1e-30  # true in tests so far
 #      assert abs(speedinlink) < 1e-1  # all the precision that's required
-      assert abs(speedinlink) < 1e-30  # true in tests so far
-#    humpdensity = argsflowfunc['tau'][frozenset({p,j})]
-#    if densityinlink > humpdensity:
-#      congestiononlink = linkcapacity - abs(flowenteringparent)
-    congestiononlink = linkcongestion(p, j, flowenteringparent, densityinlink, argsflowfunc)
-    congestionij[frozenset({p, j})] = congestiononlink
-    if abs(congestiononlink) > 0.0:  # TODO: is the abs() necessary?
-      print(f"CONGESTION of {linkcapacity:.3f}-{flowenteringparent:.1f}={congestiononlink:.3f} occurs on link ({p}, {j}) which has capacity of {linkcapacity:.3f}.")  # TODO: this measure of congestion gives a negative value when the flow entering the parent is greater than the link-capacity: might need a better measure
-    totalflow += flowenteringparent
-    totaldensity += densityinlink
-    speedsinlinks.append( speedinlink )
-    print(f"Adding {flowenteringparent:.3f} to totalflow and {densityinlink:.3f} to totaldensity that enter node {j}.")
+    totalflow += flowleavingparent
+#    totaldensity += densityinlink
+#    speedsinlinks.append( speedinlink )
+#    print(f"Adding {flowleavingparent:.3f} to totalflow and {densityinlink:.3f} to totaldensity that enter node {i}.")
+    print(f"Adding {flowleavingparent:.3f} to totalflow that enters node {i}.")
 #  speed = totalflow / totaldensity
-  if abs(totaldensity) >= EPS:
-    speed = totalflow / totaldensity  # v = q/rho
-  elif abs(totalflow) < EPS:
-    speed = np.mean( speedsinlinks )  # both total flow and total density at node j are close to zero, so we set speed to the mean value of the speeds in inbound links (FIXME: a bit of a hack, although might well be fine in practice)
-  else:  # flow in link is far from zero, density in link is close to zero
-    speed = totalflow / totaldensity  # v = q/rho
-  print(f"At node {j}, totalflow is {totalflow:.3f} and totaldensity is {totaldensity:.3f}, so speed is {speed:.3f}.")
-  return totalflow, speed
+#  assert abs(totaldensity) >= EPS  # TODO: is this always true? I put it here to catch any unexpected case in which it isn't
+##  if abs(totaldensity) >= EPS:
+##    speed = totalflow / totaldensity  # v = q/rho
+##  elif abs(totalflow) < EPS:
+##    speed = np.mean( speedsinlinks )  # both total flow and total density at node i are close to zero, so we set speed to the mean value of the speeds in inbound links (FIXME: a bit of a hack, although might well be fine in practice)
+##  else:  # flow in link is far from zero, density in link is close to zero
+##    speed = totalflow / totaldensity  # v = q/rho
+#  print(f"At node {i}, totalflow is {totalflow:.3f} and totaldensity is {totaldensity:.3f}, so speed is {speed:.3f}.")
+#  print(f"At node {i}, totalflow is {totalflow:.3f} and totaldensity is {totaldensity:.3f}.")
+  print(f"At node {i}, totalflow is {totalflow:.3f}.")
+#  return totalflow, speed
+  return totalflow
 
 
-def runSEM2orSEM3( SEMversion, JSONnetworkfilename, inflowsByNodeID):
+def evolutionofwaveandshockfronts( inflowsandflowperiodsByNodeID, simulDuration, parentsOnShortestPathsFromInjectionNodes, qij, densityij, speedij, flowstateijatnodej, argsflowfunc, exitnodes, b0, indexamonginjectionorexitnodes, shortestPathToAnExit, flowijfunc, flowfunc, injectionnodes, outflowsByNodeID ):
+  EPS = 1e-6
+  INITIALTIMESTAMP = 0.0
+#  propagatingwavefronts = {}
+#  for edge in argsflowfunc['lK']:
+#    propagatingwavefronts[edge] = []
+  propagatingwavefronts = []
+  # Create at time t=0 the initial wave-fronts at injection-nodes:
+  for a in inflowsandflowperiodsByNodeID:
+    print(f"For node {a}, inflowsandflowperiodsByNodeID[a] is {inflowsandflowperiodsByNodeID[a]}")
+    shortestpathtoanexit_froma = shortestPathToAnExit[a]
+    b = shortestpathtoanexit_froma[1]  # b is the next node in the shortest path from a to an exit-node
+#    initialflowab = qij[a, b]
+    initialflowab = 0.0
+    print(f"initial flow[{a}, {b}] is {initialflowab} veh/hr")
+    assert initialflowab == 0.0  # FIXME: should check for closeness to zero of flow's absolute value
+    print(f"In-flow at node {a} causes a downstream-propagating wave-front to form, with the in-flow - perhaps restricted by capacity of link ({a},{b}) - freely flowing upstream of the wave-front, and zero flow downstream of it.")
+    downstreamflowab = initialflowab
+    print(f"Downstream flow[{a}, {b}] is {downstreamflowab} veh/hr")
+    linkcapacity = argsflowfunc['linkcapacity'][frozenset({a,b})]
+    print(f"linkcapacity is {linkcapacity} veh/hr")
+    if inflowsandflowperiodsByNodeID[a]['inflow'] <= linkcapacity:
+      upstreamfreeflowab = inflowsandflowperiodsByNodeID[a]['inflow']
+    else:
+      upstreamfreeflowab = linkcapacity
+      # If inflow exceeds capacity, report an upstream-propagating shock-wave created at the injection-node that affects only the hypothetical injectinon-"link" by which injection-traffic might be supposed to enter the network:
+      print(f"ALERT: at injection-node node {a}, linkcapacity {linkcapacity} < injection-flow {inflowsandflowperiodsByNodeID[a]['inflow']}: there is a shock where traffic-flow enters the network there.")
+    print(f"Upstream free flow[{a}, {b}] is {upstreamfreeflowab} veh/hr")
+    edge = frozenset({a, b})
+    upstreamfreedensityab = densityonfreeflowbranchoftriangularfundamentaldiagram( upstreamfreeflowab, edge, argsflowfunc )
+#    qij[a, b] = downstreamflowab
+    downstreamdensityab = densityonfreeflowbranchoftriangularfundamentaldiagram( downstreamflowab, edge, argsflowfunc )
+    print(f"downstreamdensityab is {downstreamdensityab} veh/km")
+#    if abs(downstreamflowab) <= EPS:
+##      assert (a, b) not in qij
+##      assert (b, a) not in qij
+#      qij[a, b] = downstreamflowab
+#      print(f"qij[{a}, {b}] is now {qij[a, b]}")
+##    densityij[edge] = downstreamdensityab
+##    print(f"densityij IS NOW {densityij} veh/km")
+    print(f"As wave-front propagates downstream, flow in link [{a}, {b}] will increase from {initialflowab} to {upstreamfreeflowab} veh/hr and density increase from {downstreamdensityab} to {upstreamfreedensityab} veh/km.")
+    print(f"Calculating propagation-speed: upstreamfreeflowab is {upstreamfreeflowab}, upstreamfreedensityab is {upstreamfreedensityab}, downstreamflowab is {downstreamflowab}, downstreamdensityab is {downstreamdensityab}")
+    wavefrontPropagationSpeed = propagationSpeedOfShockFront( upstreamfreeflowab, upstreamfreedensityab, downstreamflowab, downstreamdensityab )
+    if wavefrontPropagationSpeed < 0.0:
+      upordownstreamText = 'will travel upstream'
+    elif wavefrontPropagationSpeed > 0.0:
+      upordownstreamText = 'will travel downstream'
+    else:
+      upordownstreamText = 'is stationary'
+    print(f"wavefrontPropagationSpeed is {wavefrontPropagationSpeed} km/hr: the front {upordownstreamText}")
+    assert wavefrontPropagationSpeed >= 0.0
+    if wavefrontPropagationSpeed == 0.0:  # can be zero if, for example, the inflow from node a into link (a,b) (upstream of the "wave-front") is zero, because the downstream flow is of course also zero
+      print(f"upstreamfreeflowab {upstreamfreeflowab} = downstreamflowab {downstreamflowab} (veh/hr): there is no real propagating wave-front.")
+    assert wavefrontPropagationSpeed == argsflowfunc['lK'][ frozenset({a,b}) ]
+#    speedij[edge] = upstreamfreeflowab / upstreamfreedensityab
+    upstreamfreespeedinedgeab = upstreamfreeflowab / upstreamfreedensityab
+    assert upstreamfreespeedinedgeab == argsflowfunc['lK'][frozenset({a,b})]
+##    print(f"Density in link {edge} is now {densityij[edge]} veh/km, speed is now {speedij[edge]} km/hr.")
+#    print(f"Density in link {edge} is now {upstreamfreedensityab} veh/km, speed is now {upstreamfreespeedinedgeab} km/hr.")
+    print(f"Traffic-speed in link {edge} will increase from zero to {upstreamfreespeedinedgeab} km/hr.")
+    lengthofcurrentlink = argsflowfunc['linklength'][ frozenset({a,b}) ]
+    timetilldestinationnodeonlink = lengthofcurrentlink / wavefrontPropagationSpeed
+#    if abs(wavefrontPropagationSpeed) > 0.0:  # record only the wave-fronts with non-zero speed
+##    propagatingwavefronts[frozenset({a,b})].append( {'time': INITIALTIMESTAMP, 'speed': wavefrontPropagationSpeed, 'nodesonpathtoanexit': shortestpathtoanexit_froma} )
+#    propagatingwavefronts.append( {'time': INITIALTIMESTAMP, 'currentlink': frozenset({a,b}), 'sourcenodeonlink': a, 'destinationnodeonlink': b, 'distancereacheddownlink': 0.0, 'speed': wavefrontPropagationSpeed, 'flow': upstreamfreeflowab, 'density': upstreamfreedensityab, 'timetilldestinationnodeonlink': timetilldestinationnodeonlink, 'nodesonpathtoanexit': shortestpathtoanexit_froma} )
+    propagatingwavefronts.append( {'time': INITIALTIMESTAMP, 'currentlink': frozenset({a,b}), 'sourcenodeonlink': a, 'destinationnodeonlink': b, 'distancereacheddownlink': 0.0, 'speed': wavefrontPropagationSpeed, 'flow': upstreamfreeflowab, 'density': upstreamfreedensityab, 'timetilldestinationnodeonlink': timetilldestinationnodeonlink, 'nodesonpathtoanexit': shortestpathtoanexit_froma, 'flowaheadofwavefront': 0.0, 'densityaheadofwavefront': 0.0} )
+  print(f"propagatingwavefronts is {propagatingwavefronts}")
+
+  simulationclocktime = INITIALTIMESTAMP
+  print(f"==============simulationclocktime is {simulationclocktime} hours ({simulationclocktime*3600} seconds).")
+  cumulNumVehiclesToHaveDepartedLinkDuringSimulation = {}
+  for (i, j) in qij:
+    cumulNumVehiclesToHaveDepartedLinkDuringSimulation[i, j] = 0
+  while simulationclocktime < simulDuration and propagatingwavefronts:
+    print(f"propagatingwavefronts is {propagatingwavefronts}")
+#    nexttimestepduration = min([wv['timetilldestinationnodeonlink'] for wv in propagatingwavefronts])  # the next time-step's duration, during which all wave-fronts will propagate; at the end of the next time-step one (or more) of the wave-fronts will intersect with the next node on its shortest path to an exit
+    minTimeForAWavefrontToReachNextNodeOnPath = min([wv['timetilldestinationnodeonlink'] for wv in propagatingwavefronts])  # initial candidate for the next time-step's duration, during which all wave-fronts will propagate; at the end of the minimum time just calculated, at least one of the wave-fronts will intersect with the next node on its shortest path to an exit
+    wavefrontsThatTakeExactlyThatTimeToReachTheirNextNodes = [wv for wv in propagatingwavefronts if wv['timetilldestinationnodeonlink'] == minTimeForAWavefrontToReachNextNodeOnPath]  # every wave-front that will reach, at the end of the minimum time just calculated, the next node on its shortest path to an exit
+    assert len(wavefrontsThatTakeExactlyThatTimeToReachTheirNextNodes) == 1  # TODO: modify this assertion if it turns out to be not always true, which it probably will eventually
+    nextwavefronttopropagate = wavefrontsThatTakeExactlyThatTimeToReachTheirNextNodes[0]  # this wave-front, in the next time-step, will either reach the next node on its shortest path to an exit or will first intersect with a slower-moving wave-front propagating on the same link (in which case both wave-fronts are probably upstream-propagating shock-fronts; TODO: might not be generally true, but will assert it as a check)
+    print(f"nextwavefronttopropagate, which in the next time-step will either reach the next node on its shortest path to an exit or will first intersect with a slower-moving wave-front propagating on the same link, is {nextwavefronttopropagate}")
+    edgePropagatingOn = nextwavefronttopropagate['currentlink']
+    b = nextwavefronttopropagate['destinationnodeonlink']
+    otherWavefrontsOnSameLink = [wv for wv in propagatingwavefronts if wv['currentlink'] == edgePropagatingOn and wv != nextwavefronttopropagate]
+    print(f"otherWavefrontsOnSameLink is {otherWavefrontsOnSameLink}")
+#    if otherWavefrontsOnSameLink: sys.exit()
+    if otherWavefrontsOnSameLink:
+      speed_nwvtp = nextwavefronttopropagate['speed']
+      distreacheddownlink_nwvtp = nextwavefronttopropagate['distancereacheddownlink']
+#      catchuptime = {}  # for each other wave-front on the same link, the time it would be caught up to by 'nextwavefronttopropagate'
+      minTimeForNextWavefrontToCatchAnotherOnSameLink = 9e99
+      for owv in otherWavefrontsOnSameLink:  # calculate time till this wave-front would be caught up from behind by 'nextwavefronttopropagate'
+        speed_owv = owv['speed']
+        distreacheddownlink_owv = owv['distancereacheddownlink']
+        assert speed_owv < speed_nwvtp  # the two wave-fronts' speeds should never be equal, unless they are both already at the same distance down the link, which shouldn't occur
+        assert distreacheddownlink_owv > distreacheddownlink_nwvtp
+#        assert speed_owv != speed_nwvtp  # the two wave-fronts' speeds should never be equal, unless they are both already at the same distance down the link, which shouldn't occur
+        timeTillCaughtUp = (distreacheddownlink_owv - distreacheddownlink_nwvtp) / (speed_nwvtp - speed_owv)
+        assert timeTillCaughtUp > 0.0
+#        catchuptime[owv] = timeTillCaughtUp
+        if timeTillCaughtUp < minTimeForNextWavefrontToCatchAnotherOnSameLink:
+          minTimeForNextWavefrontToCatchAnotherOnSameLink = timeTillCaughtUp
+          wavefrontCaughtUpFromBehind = owv
+##      if catchuptime:
+#      print("catchuptime is", catchuptime)
+#      wavefrontCaughtUpFromBehind = min(catchuptime, catchuptime.get)  # obtain key in dictionary 'catchuptime' having the minimum value; the default for 'min' is to give the minimum key, but here the keys are ordered by the function catchuptime.get, i.e. ordered by the keys' dictionary-values (see https://docs.python.org/3/library/functions.html#min)
+#      minTimeForNextWavefrontToCatchAnotherOnSameLink = catchuptime[wavefrontCaughtUpFromBehind]
+      print(f"minTimeForNextWavefrontToCatchAnotherOnSameLink is {minTimeForNextWavefrontToCatchAnotherOnSameLink} hours")
+      print(f"wavefrontCaughtUpFromBehind is {wavefrontCaughtUpFromBehind}")
+      assert minTimeForNextWavefrontToCatchAnotherOnSameLink > 0.0
+      assert nextwavefronttopropagate['nodesonpathtoanexit'] == 'upstream-propagating shock-front, so not applicable'  # TODO: this assertion might prove to be not generally correct
+      assert wavefrontCaughtUpFromBehind['nodesonpathtoanexit'] == 'upstream-propagating shock-front, so not applicable'  # TODO: this assertion might prove to be not generally correct
+      nexttimestepduration = minTimeForNextWavefrontToCatchAnotherOnSameLink
+      pointReachedByNextPropagatingWaveFront = 'catch up to slower-propagating shock-wave on same link'
+    else:  # there are no other wave-fronts propagating on the same link as 'nextwavefronttopropagate'
+      wavefrontCaughtUpFromBehind = None
+      minTimeForNextWavefrontToCatchAnotherOnSameLink = None
+#      nextwavefronttoreachitsdestinationnode = nextwavefronttopropagate
+      nexttimestepduration = min([wv['timetilldestinationnodeonlink'] for wv in propagatingwavefronts])  # the next time-step's duration, during which all wave-fronts will propagate; at the end of the next time-step one (or more) of the wave-fronts will intersect with the next node on its shortest path to an exit
+      pointReachedByNextPropagatingWaveFront = f'reach destination-node {b} at end of link'
+
+    print(f"nextwavefronttopropagate is {nextwavefronttopropagate}")
+    if simulationclocktime + nexttimestepduration > simulDuration:
+      nexttimestepduration = simulDuration - simulationclocktime
+      pointReachedByNextPropagatingWaveFront = f'travel until the simulation clock-time reaches simulDuration of {simulDuration} hours'
+    print(f"nexttimestepduration is {nexttimestepduration} hours")
+    for (i, j) in qij:
+      print(f"Current flow on link ({i}, {j}) between most downstream wave-front in that link and end of link at node {j} is qij[{i}, {j}]={qij[i, j]}.")
+      numVehiclesDepartingLinkDuringThisTimestep = qij[i,j] * nexttimestepduration
+      print(f"numVehiclesDepartingLinkDuringThisTimestep is {numVehiclesDepartingLinkDuringThisTimestep}")
+      cumulNumVehiclesToHaveDepartedLinkDuringSimulation[i, j] += numVehiclesDepartingLinkDuringThisTimestep
+      print(f"cumulNumVehiclesToHaveDepartedLinkDuringSimulation[{i}, {j}] is now {cumulNumVehiclesToHaveDepartedLinkDuringSimulation[i, j]}")
+#    wavefrontsthatreachtheirdestinationnodesAtNextClockTick = [wv for wv in propagatingwavefronts if wv['timetilldestinationnodeonlink'] == nexttimestepduration]  # the wave-front that will soonest reach its next node on its shortest path to an exit
+#    print(f"wavefrontsthatreachtheirdestinationnodesAtNextClockTick is {wavefrontsthatreachtheirdestinationnodesAtNextClockTick}")
+#    assert len(wavefrontsthatreachtheirdestinationnodesAtNextClockTick) == 1  # TODO: modify this assertion if it turns out to be not always true; in fact, len(wavefrontsthatreachtheirdestinationnodesAtNextClockTick) can be any integer >= 0
+#    nextwavefronttopropagate = wavefrontsthatreachtheirdestinationnodesAtNextClockTick[0]
+#    print(f"nextwavefronttopropagate is {nextwavefronttopropagate}")
+
+#    otherpropagatingwavefronts = [wv for wv in propagatingwavefronts if wv['timetilldestinationnodeonlink'] > nexttimestepduration]
+
+    assert nextwavefronttopropagate['speed'] > 0.0  # wave-front's speed in direction of its travel
+    a = nextwavefronttopropagate['sourcenodeonlink']
+#    b = nextwavefronttopropagate['destinationnodeonlink']
+    edge = frozenset({a, b})
+    currentlink = nextwavefronttopropagate['currentlink']
+#    print(f"Wave-front propagates away from node {a} on link {currentlink} at speed {nextwavefronttopropagate['speed']} km/hr, taking {nexttimestepduration} hours to reach node {b}.")
+    print(f"Wave-front propagates away from node {a} on link {currentlink} at speed {nextwavefronttopropagate['speed']} km/hr, taking {nexttimestepduration} hours to {pointReachedByNextPropagatingWaveFront}.")
+    wavefrontflowab = nextwavefronttopropagate['flow']
+    nextwavefronttopropagate['time'] = simulationclocktime + nexttimestepduration
+    lengthofcurrentlink = argsflowfunc['linklength'][ currentlink ]
+    print(f"lengthofcurrentlink is {lengthofcurrentlink} km")
+    if pointReachedByNextPropagatingWaveFront[:22] == 'reach destination-node':
+      # The chosen next wave-front to propagate reaches its current link's end-node at the end of this time-step, so propagate it further, either up- or downstream, into the shortest-path tree:
+      if nextwavefronttopropagate['nodesonpathtoanexit'] == 'upstream-propagating shock-front, so not applicable':
+#        numnodesremainingtobetraversedonpath = 'upstream-propagating shock-front, so not applicable'
+        numnodesremainingtobetraversedonpath = 0
+      else: 
+        indexInPathOfCurrentNode = nextwavefronttopropagate['nodesonpathtoanexit'].index(b)
+        numnodesremainingtobetraversedonpath = len(nextwavefronttopropagate['nodesonpathtoanexit']) - 1 - indexInPathOfCurrentNode
+      if numnodesremainingtobetraversedonpath > 0:  # update downstream-propagating wave-front as it passes through node a to the next link on its path
+#        gotonextnodeonpath()
+        c = nextwavefronttopropagate['nodesonpathtoanexit'][ indexInPathOfCurrentNode + 1]
+#        print(f"Next onward node on shortest path is c = {c}")
+        nextlinkonpath = frozenset({b, c})
+#        print(f"nextlinkonpath is {nextlinkonpath}")
+        nextlinkcapacity = argsflowfunc['linkcapacity'][nextlinkonpath]
+        print(f"At node {b}, wave-front shall encounter capacity on next link {nextlinkonpath} of {nextlinkcapacity} veh/hr.")
+        # Update wavefront's properties on the next downstream link:
+        nextwavefronttopropagate['currentlink'] = nextlinkonpath
+        nextwavefronttopropagate['sourcenodeonlink'] = b
+        nextwavefronttopropagate['destinationnodeonlink'] = c
+        nextwavefronttopropagate['distancereacheddownlink'] = 0.0
+        nextwavefronttopropagate['speed'] = argsflowfunc['lK'][frozenset({b,c})]
+        lengthofnextlink = argsflowfunc['linklength'][ nextlinkonpath ]
+        print(f"lengthofnextlink is {lengthofnextlink} km")
+        nextwavefronttopropagate['timetilldestinationnodeonlink'] = lengthofnextlink / nextwavefronttopropagate['speed']
+        nextwavefronttopropagate['flowaheadofwavefront'] = 0.0
+        nextwavefronttopropagate['densityaheadofwavefront'] = 0.0
+        if nextlinkcapacity >= wavefrontflowab:
+          print(f"This next link's capacity of {nextlinkcapacity} is no lower than the wave-front's flow of {nextwavefronttopropagate['flow']} veh/hr, so no shock-front or bottleneck results.")
+          # The wave-front traverses node b and enters the next link, perhaps changing its flow, speed, and density:
+#          freeflowinnextlink = nextlinkcapacity
+          # Now that wave-front has reached the end of its current link, update qij, densityij, and speedij as they are at the link's departing-end:
+          qij[a, b] = wavefrontflowab  # flow at the end of the current link
+#          assert len( [wv for wv in propagatingwavefronts if wv['currentlink']==edge] ) == 1  # TODO: this assertion might prove to be not generally correct
+          densityij[edge] = nextwavefronttopropagate['density']
+          speedij[edge] = nextwavefronttopropagate['speed']
+          flowstateijatnodej[a, b] = 'freeflowstate'
+          print(f"qij[{a}, {b}] is now {qij[a, b]} veh/hr, densityij[{edge}] is {densityij[edge]}, speedij[{edge}] is {speedij[edge]}, flowstateijatnodej[{a}, {b}] is {flowstateijatnodej[a, b]}.")
+        else:
+          print(f"This next link's capacity of {nextlinkcapacity} is lower than the wave-front's flow of {nextwavefronttopropagate['flow']} veh/hr, so a bottleneck results: an upstream-propagating shock-front is created, and the wave-front's flow will be reduced as it travels down the next link.")
+          nextwavefronttopropagate['flow'] = nextlinkcapacity
+#          congestedflowab = qij[a, b] * totalflowleavingnodeiDownstreamOfCongestion / (initialtotalflowEnteringNodeiFromItsParents + injectionflowati)  # TODO: divide congested flow between the links entering node b: the flow in each link, and also by implication the injection-flow, decreases proportionally
+          congestedflowab = nextlinkcapacity
+          print(f"congested flow[{a}, {b}] is {congestedflowab} veh/hr")
+          print(f"As congestion-zone propagates upstream, flow in link [{a}, {b}] will decrease from {wavefrontflowab} to {congestedflowab} veh/hr")
+          # Now that wave-front has reached the end of its current link, update qij, densityij, and speedij as they are at the link's departing-end:
+          qij[a, b] = congestedflowab
+#          print(f"edge is {edge}, propagatingwavefronts is {propagatingwavefronts}")
+#          assert len( [wv for wv in propagatingwavefronts if wv['currentlink']==edge] ) == 1  # TODO: this assertion might prove to be not generally correct
+#          totalflowEnteringNodei += congestedflowab
+          edge = frozenset({a, b})
+          congesteddensityab = densityoncongestedbranchoftriangularfundamentaldiagram( congestedflowab, edge, argsflowfunc )
+#          densityij[edge] = congesteddensityab
+#          print(f"densityij IS NOW {densityij} veh/km")
+          densityij[edge] = congesteddensityab
+          speedij[edge] = congestedflowab / congesteddensityab
+          flowstateijatnodej[a, b] = 'congestedflowstate'
+          print(f"qij[{a}, {b}] is now {qij[a, b]} veh/hr, densityij[{edge}] is {densityij[edge]}, speedij[{edge}] is {speedij[edge]}, flowstateijatnodej[{a}, {b}] is {flowstateijatnodej[a, b]}.")
+          upstreamfreeflowab = wavefrontflowab
+          upstreamfreedensityab = densityonfreeflowbranchoftriangularfundamentaldiagram( upstreamfreeflowab, edge, argsflowfunc )
+          print(f"Calculating propagation-speed of shock-front: upstreamfreeflowab is {upstreamfreeflowab}, upstreamfreedensityab is {upstreamfreedensityab}, congestedflowab is {congestedflowab}, congesteddensityab is {congesteddensityab}")
+          shockFrontPropagationSpeed = propagationSpeedOfShockFront( upstreamfreeflowab, upstreamfreedensityab, congestedflowab, congesteddensityab )
+          if shockFrontPropagationSpeed < 0.0:
+            upordownstreamText = 'travels upstream'
+          elif shockFrontPropagationSpeed > 0.0:
+            upordownstreamText = 'travels downstream'
+          else:
+            upordownstreamText = 'is stationary'
+          print(f"shockFrontPropagationSpeed is {shockFrontPropagationSpeed} km/hr: the front {upordownstreamText}")
+          assert shockFrontPropagationSpeed < 0.0
+#          if shockFrontPropagationSpeed == 0.0:  # can be zero if, for example, the link's free flow upstream of the shock-front is zero, as then the "congested" flow is also zero
+#            print(f"upstreamfreeflowab {upstreamfreeflowab} = congestedflowab {congestedflowab}: there is no real congestion.")
+#          print(f"Density in link {edge} is now {densityij[edge]}, speed is now {speedij[edge]}.")
+          timetillupstreamnodeonlink = -lengthofcurrentlink / shockFrontPropagationSpeed
+          assert timetillupstreamnodeonlink > 0.0
+          shockfrontdict = {'time': simulationclocktime + nexttimestepduration, 'currentlink': frozenset({a,b}), 'sourcenodeonlink': b, 'destinationnodeonlink': a, 'distancereacheddownlink': 0.0, 'speed': -shockFrontPropagationSpeed, 'flow': congestedflowab, 'density': congesteddensityab, 'timetilldestinationnodeonlink': timetillupstreamnodeonlink, 'nodesonpathtoanexit': 'upstream-propagating shock-front, so not applicable', 'flowaheadofwavefront': upstreamfreeflowab, 'densityaheadofwavefront': upstreamfreedensityab}
+
+          print(f"New upstream-propagating shock-front is {shockfrontdict}")
+          propagatingwavefronts.append( shockfrontdict )
+#          print(f"After appending new upstream-propagating shock-front, propagatingwavefronts is {propagatingwavefronts}")
+          nextwavefronttopropagate['density'] = nextwavefronttopropagate['flow'] / nextwavefronttopropagate['speed']
+
+      else:  # there are no more untraversed links remaining on this shortest path
+        if nextwavefronttopropagate['nodesonpathtoanexit'] == 'upstream-propagating shock-front, so not applicable':  # the wave-front is upstream-propagating
+          parentnodesofb = parentsOnShortestPathsFromInjectionNodes[b]
+          print(f"Node {b}'s parent-nodes on shortest paths from injection-nodes are {parentnodesofb}")
+          if not parentnodesofb:  # b has no parent-nodes on the shortest paths
+            nextwavefronttopropagate['timetilldestinationnodeonlink'] = 0.0
+            nextwavefronttopropagate['distancereacheddownlink'] += nextwavefronttopropagate['speed'] * nexttimestepduration
+#            assert nextwavefronttopropagate['distancereacheddownlink'] == argsflowfunc['linklength'][ frozenset({a, b}) ]
+            assert abs(nextwavefronttopropagate['distancereacheddownlink'] - lengthofcurrentlink) <= EPS
+            print(f"As it exits the network at exit-node {b}, wave-front {nextwavefronttopropagate} is removed from propagatingwavefronts.")
+            propagatingwavefronts.remove( nextwavefronttopropagate )
+          else:  # update upstream-propagating shock-wave as it travels up node b's parent-links
+#            assert len(parentsOnShortestPathsFromInjectionNodes[b]) == 1  # TODO: generalise to the case in which node b has more than one parent-link on the shortest paths from injection-nodes
+#            p0 = parentsOnShortestPathsFromInjectionNodes[b][0]  # p0 is the single parent-node of b
+            for p in parentnodesofb:
+#              flowenteringparent = flowEnteringNode( p, i, parentsOnShortestPathsFromInjectionNodes, qij, densityij, speedij, argsflowfunc, exitnodes, b0, indexamonginjectionorexitnodes, shortestPathToAnExit, flowijfunc, flowfunc, injectionnodes )
+              assert b == shortestPathToAnExit[p][1]  # b is the next node in the shortest path from p to an exit-node
+#              linkcapacity = argsflowfunc['linkcapacity'][frozenset({p,i})]
+#              if flowenteringparent > linkcapacity:
+#                print(f"WARNING: entering-flow of {flowenteringparent:.1f} is too high for link ({p}, {i}) which has a capacity of {linkcapacity:.3f}: the link will have flow at this capacity, while a congestion-zone will propagate up the upstream link(s); the congestion-zone will have density to the right of the hump in its link's flow-function, and correspondingly low speed.")
+              flowpb = qij[p, b]
+#              densitypb = densityij[frozenset({p, b})]
+#              speedpb = flowpb / densitypb
+              timeThatShockFrontReachedNodea = simulationclocktime + nexttimestepduration
+#              propagateSEM4congestionUpstreamToParents( nextwavefronttopropagate, b, p, flowpb, parentsOnShortestPathsFromInjectionNodes, qij, densityij, speedij, argsflowfunc, injectionnodes, b0, indexamonginjectionorexitnodes )
+              propagateSEM4congestionUpstreamToParents( nextwavefronttopropagate, b, timeThatShockFrontReachedNodea, parentsOnShortestPathsFromInjectionNodes, qij, densityij, speedij, flowstateijatnodej, argsflowfunc, injectionnodes, b0, indexamonginjectionorexitnodes, propagatingwavefronts, nexttimestepduration )
+
+        else:  # the wave-front is downstream-propagating
+          assert b in exitnodes
+          nextwavefronttopropagate['timetilldestinationnodeonlink'] = 0.0
+          nextwavefronttopropagate['distancereacheddownlink'] += nextwavefronttopropagate['speed'] * nexttimestepduration
+          print(f"nextwavefronttopropagate['distancereacheddownlink'] is {nextwavefronttopropagate['distancereacheddownlink']}, lengthofcurrentlink is {lengthofcurrentlink}")
+#          assert nextwavefronttopropagate['distancereacheddownlink'] == argsflowfunc['linklength'][ frozenset({a, b}) ]
+          assert abs(nextwavefronttopropagate['distancereacheddownlink'] - lengthofcurrentlink) <= EPS
+          qij[a, b] = nextwavefronttopropagate['flow']  # wave-front has reached the end of its current link, so update qij, densityij, and speedij
+          densityij[edge] = nextwavefronttopropagate['density']
+          speedij[edge] = nextwavefronttopropagate['speed']
+          flowstateijatnodej[a, b] = 'freeflowstate'
+          print(f"qij[{a}, {b}] is now {qij[a, b]} veh/hr, densityij[{edge}] is {densityij[edge]}, speedij[{edge}] is {speedij[edge]}, flowstateijatnodej[{a}, {b}] is {flowstateijatnodej[a, b]}.")
+          print(f"As it exits the network at exit-node {b}, wave-front {nextwavefronttopropagate} is removed from propagatingwavefronts.")
+          propagatingwavefronts.remove( nextwavefronttopropagate )
+          assert nextwavefronttopropagate['nodesonpathtoanexit'][-1] == b
+          outflowsByNodeID[b] = -nextwavefronttopropagate['flow']
+
+    elif pointReachedByNextPropagatingWaveFront == 'catch up to slower-propagating shock-wave on same link':
+      nextwavefronttopropagate['timetilldestinationnodeonlink'] -= nexttimestepduration
+      nextwavefronttopropagate['distancereacheddownlink'] += nextwavefronttopropagate['speed'] * nexttimestepduration
+      print(f"nextwavefronttopropagate['distancereacheddownlink'] is {nextwavefronttopropagate['distancereacheddownlink']}, lengthofcurrentlink is {lengthofcurrentlink}")
+      upstreamflow = wavefrontCaughtUpFromBehind['flowaheadofwavefront']
+      upstreamdensity = wavefrontCaughtUpFromBehind['densityaheadofwavefront']
+      congestedflow = nextwavefronttopropagate['flow']
+      congesteddensity = nextwavefronttopropagate['density']
+      print(f"Calculating new propagation-speed of shock-front: upstreamflow is {upstreamflow}, upstreamdensity is {upstreamdensity}, congestedflow is {congestedflow}, congesteddensity is {congesteddensity}")
+      shockFrontPropagationSpeed = propagationSpeedOfShockFront( upstreamflow, upstreamdensity, congestedflow, congesteddensity )
+      if shockFrontPropagationSpeed < 0.0:
+        upordownstreamText = 'travels upstream'
+      elif shockFrontPropagationSpeed > 0.0:
+        upordownstreamText = 'travels downstream'
+      else:
+        upordownstreamText = 'is stationary'
+      print(f"New shockFrontPropagationSpeed is {shockFrontPropagationSpeed} km/hr: the front {upordownstreamText}")
+      assert shockFrontPropagationSpeed < 0.0
+      nextwavefronttopropagate['flowaheadofwavefront'] = wavefrontCaughtUpFromBehind['flowaheadofwavefront']
+      nextwavefronttopropagate['densityaheadofwavefront'] = wavefrontCaughtUpFromBehind['densityaheadofwavefront']
+      print(f"As it's caught up from behind by upstream-propagating shock-front with speed {nextwavefronttopropagate['speed']}, wave-front {wavefrontCaughtUpFromBehind} is removed from propagatingwavefronts.")
+      propagatingwavefronts.remove( wavefrontCaughtUpFromBehind )
+      print(f"propagatingwavefronts is {propagatingwavefronts}")
+
+    elif pointReachedByNextPropagatingWaveFront[:60] == 'travel until the simulation clock-time reaches simulDuration':
+      nextwavefronttopropagate['timetilldestinationnodeonlink'] -= nexttimestepduration
+      nextwavefronttopropagate['distancereacheddownlink'] += nextwavefronttopropagate['speed'] * nexttimestepduration
+      print(f"nextwavefronttopropagate['distancereacheddownlink'] is {nextwavefronttopropagate['distancereacheddownlink']} km")
+      print(f"As its propagation ceases at the end of the simulation, wave-front {nextwavefronttopropagate} is removed from propagatingwavefronts.")
+      propagatingwavefronts.remove( nextwavefronttopropagate )
+
+    if nextwavefronttopropagate in propagatingwavefronts:  # if this wave-front hasn't just been removed from 'propagatingwavefronts'
+#      print(f"Updated downstream-propagating wavefront is {nextwavefronttopropagate}")
+      print(f"Updated propagating wavefront is {nextwavefronttopropagate}")
+##    print(f"After updating downstream-propagating wavefront, propagatingwavefronts is {propagatingwavefronts}")
+#    print(f"After updating downstream-propagating wavefront, len(propagatingwavefronts) is {len(propagatingwavefronts)}")
+    print(f"After updating propagating wavefront, len(propagatingwavefronts) is {len(propagatingwavefronts)}")
+
+#    otherpropagatingwavefronts = [wv for wv in propagatingwavefronts if wv['timetilldestinationnodeonlink'] > nexttimestepduration]
+    otherpropagatingwavefronts = [wv for wv in propagatingwavefronts if wv['time'] == simulationclocktime]
+    print(f"otherpropagatingwavefronts, i.e. with 'time' {simulationclocktime}, is {otherpropagatingwavefronts}")
+#    assert len(otherpropagatingwavefronts) == len(propagatingwavefronts) - 1  # not generally true
+    for wavefront in otherpropagatingwavefronts:
+#      if wavefront['speed'] <= 0.0:
+#        continue
+      wavefront['time'] += nexttimestepduration
+      wavefront['distancereacheddownlink'] += wavefront['speed'] * nexttimestepduration
+      wavefront['timetilldestinationnodeonlink'] -= nexttimestepduration
+      if wavefront['nodesonpathtoanexit'] == 'upstream-propagating shock-front, so not applicable':
+        direction = 'upstream'
+      else:
+        direction = 'downstream'
+      print(f"Updated {direction}-propagating wavefront is {wavefront}")
+  
+    simulationclocktime += nexttimestepduration
+    print(f"==============simulationclocktime is {simulationclocktime} hours ({simulationclocktime*3600} seconds).")
+    print(f"cumulNumVehiclesToHaveDepartedLinkDuringSimulation is {cumulNumVehiclesToHaveDepartedLinkDuringSimulation}")
+#    sys.exit()
+
+  if simulationclocktime < simulDuration:  # run final time-step, ending at the specified duration of the simulation
+    assert propagatingwavefronts == []
+    finaltimestepduration = simulDuration - simulationclocktime  # the final time-step's duration, by the start of which every propagating wave-front has departed the network: this implies that during the final time-step, the flow in (the entire length of) every directed link (i, j) adds to cumulNumVehiclesToHaveDepartedLinkDuringSimulation[i, j]
+    print(f"finaltimestepduration is {finaltimestepduration} hours")
+    for (i, j) in qij:
+      print(f"Current flow on entire length of link ({i}, {j}) is qij[{i}, {j}]={qij[i, j]}.")
+      numVehiclesDepartingLinkDuringThisTimestep = qij[i,j] * finaltimestepduration
+      print(f"numVehiclesDepartingLinkDuringThisTimestep on link ({i}, {j}) is {numVehiclesDepartingLinkDuringThisTimestep}")
+      cumulNumVehiclesToHaveDepartedLinkDuringSimulation[i, j] += numVehiclesDepartingLinkDuringThisTimestep
+      print(f"cumulNumVehiclesToHaveDepartedLinkDuringSimulation[{i}, {j}] is now {cumulNumVehiclesToHaveDepartedLinkDuringSimulation[i, j]}")
+    simulationclocktime += finaltimestepduration
+    print(f"==============simulationclocktime is {simulationclocktime} hours ({simulationclocktime*3600} seconds).")
+
+#  timeaveragedflowsinlinksoverSimulDuration = {}
+#  return timeaveragedflowsinlinksoverSimulDuration
+  return (cumulNumVehiclesToHaveDepartedLinkDuringSimulation, outflowsByNodeID)
+
+
+#def runSEM2or3or4( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperiodsByNodeID, exitnodes, simulDuration=14/3600):
+def runSEM2or3or4( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperiodsByNodeID, exitnodes, simulDuration=1.0):  # SEM4 specifies a duration (in hours) for the simulated propagation of wave- and shock-fronts
   starttime = time.time()
+  print(f"duration of simulation is {simulDuration*3600} seconds.")
   print("inflowsByNodeID is", inflowsByNodeID)
 ##  (terminatorPressure, eps, eps_flowbalance, flowfunc, flowijfunc, derivijfunc, adjacency, N, exitnodes, injectionnodes, indexamonginjectionorexitnodes, neighboursofj, hExitNodes, totalinflow, argsflowfunc, lK, linklength, v0, pointcoordsbyID) = setuptrafficflowproblem( JSONnetworkfilename, b0 )
 #  (terminatorPressure, eps, eps_flowbalance, flowfunc, flowijfunc, derivijfunc, adjacency, N, exitnodes, injectionnodes, indexamonginjectionorexitnodes, neighboursofj, hExitNodes, argsflowfunc, pointcoordsbyID) = setuptrafficflowproblem( JSONnetworkfilename )
-  (terminatorPressure, eps, flowfunc, flowijfunc, derivijfunc, adjacency, N, exitnodes, injectionnodes, indexamonginjectionorexitnodes, neighboursofj, hExitNodes, argsflowfunc, pointcoordsbyID, linestringsWithCoords) = setuptrafficflowproblem( JSONnetworkfilename )
+  (terminatorPressure, eps, flowfunc, flowijfunc, derivijfunc, adjacency, N, exitnodes, injectionnodes, indexamonginjectionorexitnodes, neighboursofj, hExitNodes, argsflowfunc, pointcoordsbyID, linestringsWithCoords) = setuptrafficflowproblem( JSONnetworkfilename, exitnodes )
 
   print("injectionnodes is", injectionnodes)
   b0 = np.zeros( len(injectionnodes) )
@@ -1341,11 +1875,11 @@ def runSEM2orSEM3( SEMversion, JSONnetworkfilename, inflowsByNodeID):
 
 #  SPEEDOFINJECTEDTRAFFIC = 10  # assumed speed of injected traffic at every injection-node (speed of traffic as it enters an injection-node), in kilometres per hour
 #  SPEEDOFINJECTEDTRAFFIC = 13  # assumed speed of injected traffic at every injection-node (speed of traffic as it enters an injection-node), in kilometres per hour
-  SPEEDOFINJECTEDTRAFFIC = 20  # assumed speed of injected traffic at every injection-node (speed of traffic as it enters an injection-node), in kilometres per hour
+#  SPEEDOFINJECTEDTRAFFIC = 20  # assumed speed of injected traffic at every injection-node (speed of traffic as it enters an injection-node), in kilometres per hour
 #  SPEEDOFINJECTEDTRAFFIC = 30  # assumed speed of injected traffic at every injection-node (speed of traffic as it enters an injection-node), in kilometres per hour
 
-  v0 = np.full( shape=len(b0), fill_value=SPEEDOFINJECTEDTRAFFIC)  # speed of traffic as it enters each injection-node, in kilometres per hour
-  print("v0 (speed of traffic as it enters an injection-node) is", v0)
+#  v0 = np.full( shape=len(b0), fill_value=SPEEDOFINJECTEDTRAFFIC)  # speed of traffic as it enters each injection-node, in kilometres per hour
+#  print("v0 (speed of traffic as it enters an injection-node) is", v0)
   totalinflow = sum(b0)
   print("totalinflow is sum(b0) =", totalinflow)
   endtime = time.time()
@@ -1517,14 +2051,14 @@ def runSEM2orSEM3( SEMversion, JSONnetworkfilename, inflowsByNodeID):
       print("No invalid solutions were found.")
 
 
-#  else:  # don't use the solver; instead find shortest-path routes
-  elif SEMversion == 'SEM3':  # don't use the solver; instead find shortest-path routes
+#  elif SEMversion == 'SEM3':  # don't use the solver; instead find shortest-path routes
+  elif SEMversion in ('SEM3', 'SEM4'):  # don't use the solver; instead find shortest-path routes
     starttime = time.time()
     print("\nFinding shortest-path routes from all injection-nodes ...")
     vertices = range(N)
     predictedLinkTraversalTime = {}  # traversal-time as might be predicted by a driver
-    edges = []  # lK stores the 'free speed' of each road-link
-    lK = argsflowfunc['lK']
+    edges = []
+    lK = argsflowfunc['lK']  # lK stores the 'free speed' of each road-link
     linklength = argsflowfunc['linklength']
     for edge in lK.keys():  # lK stores the 'free speed' of each road-link
       (a, b) = list(edge)
@@ -1558,14 +2092,20 @@ def runSEM2orSEM3( SEMversion, JSONnetworkfilename, inflowsByNodeID):
           shortestPathToAnExit[i] = shortestpath
 #        print("shortestpath is", shortestpath)
 
+    qij = {}  # store initial flows on all arcs, i.e. directed edges, that are in the shortest-path tree
+    flowstateijatnodej = {}  # store flow-state, either 'freestate' or 'congestedstate', on all arcs, i.e. directed edges, that are in the shortest-path tree
     for i in injectionnodes:  # proceed down each injection-node's shortest path to an exit, adding for each node after the first one on the path its parent on the path as one of that node's parents on all shortest paths from injection-nodes
       for index, j in enumerate( shortestPathToAnExit[i] ):
         if index > 0:
-          parentsOnShortestPathsFromInjectionNodes[j].add( shortestPathToAnExit[i][index-1] )
+          parentofj = shortestPathToAnExit[i][index-1]
+          parentsOnShortestPathsFromInjectionNodes[j].add( parentofj )
+          qij[parentofj, j] = 0.0
+          flowstateijatnodej[parentofj, j] = 'freeflowstate'
     print(f"shortestDistanceToAnExit is", shortestDistanceToAnExit)
     print("closestExit is", closestExit)
     print("shortestPathToAnExit is", shortestPathToAnExit)
     print("parentsOnShortestPathsFromInjectionNodes is", parentsOnShortestPathsFromInjectionNodes)
+    print("qij is", qij)
 #    sys.exit()
 
     # Every vehicle flows along a shortest path from its injection-node to an exit-node, and the traffic-flow in the entire network is the sum of the flows along these shortest paths. 
@@ -1583,20 +2123,81 @@ def runSEM2orSEM3( SEMversion, JSONnetworkfilename, inflowsByNodeID):
 #      sectiondensity = enteringflow / enteringspeed
 ##      print(f"After injection-flow of {enteringflow:.1f} veh/hr at node {i} has flowed towards node {j} at speed v0={v0[indexamonginjectionorexitnodes[i]]:.1f} km/hr for {timeinterval:.6f} hours, covering a distance of {sectionlength:.3f} km, the density in this section becomes {sectiondensity:.3f} veh/km.")
 
-    qij = {}  # store flows on all edges
+#    qij = {}  # store flows on all edges
     congestionij = {}  # store congestion-values on all edges
     densityij = {}  # store densities on all edges
     speedij = {}  # store densities on all edges
+    for edge in lK.keys():
+#      qij[edge[0], edge[1]] = 0.0
+      densityij[edge] = 'linkNotUsedByTrafficInAShortestPath'
+      speedij[edge] = 'linkNotUsedByTrafficInAShortestPath'
     outflowsByNodeID = {}  # store the out-flows at exit-nodes, as they are calculated by the solution-method (Newton-Raphson, global optimiser, or shortest-path-based method)
-    for j in exitnodes:
-      flow, speed = flowandspeedEnteringNode( j, parentsOnShortestPathsFromInjectionNodes, qij, congestionij, densityij, speedij, argsflowfunc, exitnodes, b0, indexamonginjectionorexitnodes, v0, shortestPathToAnExit, flowijfunc, flowfunc )
-      outflowsByNodeID[j] = -flow
-    print(f"flow is {flow:.3f}, speed is {speed:.3f}.")
+
+    if SEMversion == 'SEM3':
+      for i in exitnodes:
+#        flow, speed = flowandspeedEnteringNode( i, parentsOnShortestPathsFromInjectionNodes, qij, congestionij, densityij, speedij, argsflowfunc, exitnodes, b0, indexamonginjectionorexitnodes, v0, shortestPathToAnExit, flowijfunc, flowfunc )
+        childnode = None  # an exit-node has no child-nodes on any shortest path
+#        flow, speed = flowandspeedEnteringNode( i, childnode, parentsOnShortestPathsFromInjectionNodes, qij, congestionij, densityij, speedij, argsflowfunc, exitnodes, b0, indexamonginjectionorexitnodes, shortestPathToAnExit, flowijfunc, flowfunc )  # get rid of injection-speed 'v0' and replace it with the link's free speed
+        flow = flowEnteringNode( i, childnode, parentsOnShortestPathsFromInjectionNodes, qij, densityij, speedij, argsflowfunc, exitnodes, b0, indexamonginjectionorexitnodes, shortestPathToAnExit, flowijfunc, flowfunc, injectionnodes )  # get rid of injection-speed 'v0' and replace it with the link's free speed
+        outflowsByNodeID[i] = -flow
+    elif SEMversion == 'SEM4':
+#      timeaveragedflowsinlinksoverSimulDuration = evolutionofwaveandshockfronts( inflowsandflowperiodsByNodeID, simulDuration, parentsOnShortestPathsFromInjectionNodes, qij, densityij, speedij, argsflowfunc, exitnodes, b0, indexamonginjectionorexitnodes, shortestPathToAnExit, flowijfunc, flowfunc, injectionnodes )
+      (cumulNumVehiclesToHaveDepartedLinkDuringSimulation, outflowsByNodeID) = evolutionofwaveandshockfronts( inflowsandflowperiodsByNodeID, simulDuration, parentsOnShortestPathsFromInjectionNodes, qij, densityij, speedij, flowstateijatnodej, argsflowfunc, exitnodes, b0, indexamonginjectionorexitnodes, shortestPathToAnExit, flowijfunc, flowfunc, injectionnodes, outflowsByNodeID )
+      timeaveragedflowsinlinksoverSimulDuration = {key: cumulNumVehiclesToHaveDepartedLinkDuringSimulation[key] / simulDuration for key in cumulNumVehiclesToHaveDepartedLinkDuringSimulation}
+
+    print("qij is", qij)
+    print("outflowsByNodeID is", outflowsByNodeID)
+    if SEMversion == 'SEM3':
+#      print(f"flow is {flow:.3f}, speed is {speed:.3f}.")
+      print(f"flow is {flow:.3f}.")
+    elif SEMversion == 'SEM4':
+      print(f"cumulNumVehiclesToHaveDepartedLinkDuringSimulation is {cumulNumVehiclesToHaveDepartedLinkDuringSimulation}.")
+      print(f"timeaveragedflowsinlinksoverSimulDuration is {timeaveragedflowsinlinksoverSimulDuration}.")
     endtime = time.time()
-    print("densityij is", densityij)
-    print("speedij is", speedij)
     timetorunshortestpathbasedmethod = endtime - starttime
     print(f"Shortest-path-based method took {timetorunshortestpathbasedmethod:.5f} seconds.")
+    print("densityij is", densityij)
+    print("speedij is", speedij)
+    starttime = time.time()
+    print("Calculating congestion in edges...")
+#    print(f"qij.keys() is {qij.keys()}")
+    print(f"densityij.keys() is {densityij.keys()}")
+##    for edge in qij.keys():
+#    for edge in densityij.keys():
+    for edge in lK.keys():
+##      humpdensity = argsflowfunc['tau'][frozenset({p,i})]
+##      if densityinlink > humpdensity:
+##        congestiononlink = linkcapacity - abs(flowleavingparent)
+      (r, s) = edge
+      if (r, s) in qij:
+        flowinedge = qij[r, s]
+#      if flowinedge < 0.0:
+      elif (s, r) in qij:
+        (r, s) = (s, r)
+        flowinedge = qij[r, s]
+      else:
+        congestionij[frozenset({r, s})] = 'linkNotUsedByTrafficInAShortestPath'
+        print(f"Congestion on link ({r}, {s}) is 'linkNotUsedByTrafficInAShortestPath'.")
+        continue
+      print(f"flowinedge qij[{r}, {s}] is {flowinedge}")
+      print(f"densityij[{edge}] is {densityij[edge]}")
+      congestiononlink = linkcongestion(r, s, flowinedge, densityij[edge], argsflowfunc)
+      congestionij[frozenset({r, s})] = congestiononlink
+      assert congestiononlink >= 0.0
+      linkcapacity = argsflowfunc['linkcapacity'][edge]
+      if abs(congestiononlink) > 0.0:  # TODO: is the abs() necessary?
+        print(f"CONGESTION of {linkcapacity:.3f}-{flowinedge:.3f}={congestiononlink:.3f} occurs on link ({r}, {s}) which has capacity of {linkcapacity:.3f}.")  # TODO: this measure of congestion gives a negative value when the flow entering the parent is greater than the link-capacity: might need a better measure
+      else:
+        print(f"There is NO congestion on link ({r}, {s}) which has capacity of {linkcapacity:.3f}.")
+    endtime = time.time()
+    timetocalculatecongestion = endtime - starttime
+    print(f"Calculation of congestion took {timetocalculatecongestion:.5f} seconds.")
+    if SEMversion == 'SEM4':
+#      origkeys_qij = qij.keys() 
+#      for (a,b) in origkeys_qij:
+      for (a,b) in qij:
+        qij[a,b] = timeaveragedflowsinlinksoverSimulDuration[a,b]
+      print(f"qij is now defined to be the time-averaged flows over simulDuration of {simulDuration} hours ({simulDuration*3600:.1f} seconds), qij={qij}")
 
 
 
@@ -1645,11 +2246,22 @@ def runSEM2orSEM3( SEMversion, JSONnetworkfilename, inflowsByNodeID):
         linkJSON["properties"]["flow"] = qij[a, b]
       elif SEMversion == 'SEM3':  # found shortest-path routes, rather than using the global optimiser
         linkJSON["properties"]["flow"] = densityij[frozenset({a, b})] * speedij[frozenset({a, b})]
-    else:
+      elif SEMversion == 'SEM4':  # found shortest-path routes, rather than using the global optimiser
+        linkJSON["properties"]["flow"] = timeaveragedflowsinlinksoverSimulDuration[a, b]
+    elif (b,a) in qij:
       if SEMversion == 'SEM2':  # found shortest-path routes, rather than using the global optimiser
         linkJSON["properties"]["flow"] = -qij[b, a]
       elif SEMversion == 'SEM3':  # found shortest-path routes, rather than using the global optimiser
         linkJSON["properties"]["flow"] = -densityij[frozenset({b, a})] * speedij[frozenset({b, a})]
+      elif SEMversion == 'SEM4':  # found shortest-path routes, rather than using the global optimiser
+        linkJSON["properties"]["flow"] = -timeaveragedflowsinlinksoverSimulDuration[b, a]
+    else:
+#      try:
+#        linkJSON["properties"]["flow"] = -densityij[frozenset({b, a})] * speedij[frozenset({b, a})]
+#      except:
+#        print(f"densityij[frozenset({{{b}, {a}}})] is {densityij[frozenset({b, a})]}, speedij[frozenset({{{b}, {a}}})] is {speedij[frozenset({b, a})]}")
+#        raise
+      linkJSON["properties"]["flow"] = 'linkNotUsedByTrafficInAShortestPath'
 #    linkJSON["properties"]["k"] =  # TODO: necessary for SEM2?
     linkJSON["properties"]["length"] = linkproperties['length']
     linkJSON["properties"]["matsim_linkID"] = linkproperties['matsim_linkID']
@@ -1674,13 +2286,14 @@ def runSEM2orSEM3( SEMversion, JSONnetworkfilename, inflowsByNodeID):
     print()
     print("qij is %s" % qij)
     print("congestionij is %s" % congestionij)
-    if SEMversion == 'SEM3':  # found shortest-path routes, rather than using the global optimiser
+    if SEMversion in ('SEM3', 'SEM4'):  # found shortest-path routes, rather than using the global optimiser
       print("densityij is %s" % densityij)
       print("speedij is %s" % speedij)
     G = nx.DiGraph()  #G = nx.Graph()
 #    DECIMALPLACES = 4  # number of decimal places to show in values on the graph
 #    DECIMALPLACES = 3  # number of decimal places to show in values on the graph
-    DECIMALPLACES = 1  # number of decimal places to show in values on the graph
+    DECIMALPLACES = 2  # number of decimal places to show in values on the graph
+#    DECIMALPLACES = 1  # number of decimal places to show in values on the graph
 #    DECIMALPLACES = 0  # number of decimal places to show in values on the graph
 
 #    G.add_nodes_from(range(4))
@@ -1715,7 +2328,7 @@ def runSEM2orSEM3( SEMversion, JSONnetworkfilename, inflowsByNodeID):
       if SEMversion == 'SEM2':  # used the solver, rather than finding shortest-path routes
         speedonlink = qij[i,j] / densityonlink
 #      else:
-      elif SEMversion == 'SEM3':
+      elif SEMversion in ('SEM3', 'SEM4'):
         speedonlink = speedij[frozenset({i, j})]
       print("speedonlink is %s" % speedonlink)
       speedrounded = round(speedonlink, DECIMALPLACES)
@@ -1831,7 +2444,7 @@ def runSEM2orSEM3( SEMversion, JSONnetworkfilename, inflowsByNodeID):
     BBnorth = max([pos[i][1] for i in range(N)])
     BBsouth = min([pos[i][1] for i in range(N)])
     print(f"BBwest {BBwest}, BBeast {BBeast}, BBnorth {BBnorth}, BBsouth {BBsouth}")
-    print("BBeast-BBwest is", BBeast-BBwest)
+#    print("BBeast-BBwest is", BBeast-BBwest)
     pos_hvalues = {}
 #    for i in range(N):
     for v, coords in pos.items():
@@ -1851,7 +2464,7 @@ def runSEM2orSEM3( SEMversion, JSONnetworkfilename, inflowsByNodeID):
 #        y = .5
         y = BBsouth - .003
       pos_hvalues[v] = np.array([x, y])
-      print("np.array([x, y] is", np.array([x, y]))
+#      print("np.array([x, y] is", np.array([x, y]))
     print("pos_hvalues is %s" % pos_hvalues)
     if SEMversion == 'SEM2':  # used the solver, rather than finding shortest-path routes
       nx.draw_networkx_labels(G, pos_hvalues, hvaluelabels, font_color='k')
@@ -1937,9 +2550,10 @@ if __name__ == '__main__':  # Needed only if another file shall import this one 
   inflowsByNodeID = {0: 443.0}  # in general, will contain all non-zero (positive) inflows and the corresponding node-IDs
 #  b0 = np.array([506.111])  # capacity of the single link is about 505.605, and 506.111 is the lowest value to 3 d.p. that causes the global minimiser to fail to find a flow-balanced solution
 #  b0 = np.array([600.0])
+  exitnodes = {1}
   networktype = 'linear'
 
   print(f"JSONnetworkfilename is {JSONnetworkfilename}")
 
-#  outputGeoJSON = runSEM2orSEM3( SEMversion, inputfilename, inflowsByNodeID)
-  outputGeoJSON = runSEM2orSEM3( SEMversion, JSONnetworkfilename, inflowsByNodeID)
+#  outputGeoJSON = runSEM2or3or4( SEMversion, inputfilename, inflowsByNodeID)
+  outputGeoJSON = runSEM2or3or4( SEMversion, JSONnetworkfilename, inflowsByNodeID, exitnodes)
