@@ -16,22 +16,24 @@ import solversSEM2and3and4
 #simulDurationInHours = 2.0
 #simulDurationInHours = 5.0
 simulDurationInHours = 10.0
+#simulDurationInHours = 100.0  # to see the effects of running the simulation for an "infinite" length of time
 
 #SEMversion = 'SEM1'  # original C++ version of SEM, with monotonic flow and an h-value at each node; the Newton-Raphson method finds solutions
-#SEMversion = 'SEM2'  # second version of SEM, with non-monotonic flow and an h-value at each node; a global optimiser finds solutions
+SEMversion = 'SEM2'  # second version of SEM, with non-monotonic flow and an h-value at each node; a global optimiser finds solutions
 #SEMversion = 'SEM3'  # third version of SEM, with each vehicle using its shortest path to an exit-node
-SEMversion = 'SEM4'  # dynamic-flow version of SEM3, with simulation running for a specified duration
+#SEMversion = 'SEM4'  # dynamic-flow version of SEM3, with simulation running for a specified duration
 
 #SCENARIO = 'testdata'
 #SCENARIO = 'cmr_1s1d1r'
 #SCENARIO = 'onenodenetwork'  # a test-case, as the scenario with one node and no links ought to fail; this is because the number of injection-nodes is required to be both greater than zero and fewer than the total number of nodes, which makes it impossible to consistently define a set of injection-nodes in the one-node case
 #SCENARIO = 'twonodenetwork'
 #SCENARIO = 'threenodelinearnetwork'
+SCENARIO = 'threenodelinearnetworkFalseNegativeSEM2'
 #SCENARIO = 'fournodelinearnetworkmissingendpoint'
 #SCENARIO = 'fournodelinearnetwork'  # TODO: test this next
 #SCENARIO = 'fivenodelinearnetwork'
 #SCENARIO = 'fournodetree'
-SCENARIO = 'sixnodenontree'
+#SCENARIO = 'sixnodenontree'
 
 # TODO: allow user to enter the name of the input-file via a command-line option (use ArgumentParser or similar):
 if SCENARIO == 'testdata':
@@ -44,6 +46,8 @@ elif SCENARIO == 'cmr_1s1d1r':
   inputfilename = 'cmr_1s1d1r_network.linksFinalNodeDeleted-linksInTopologicalOrder.geojson'
 #  inflowNodeID = 3  # a single inflow at node 3
 #  inflowsByNodeID = {3: 1000}
+#  inflowsByNodeID = {5:300, 6:700}
+#  inflowsByNodeID = {3: 1000, 5:300, 6:700}
   inflowsByNodeID = {3: 1000, 4:1500, 5:300, 6:700}
 #  inflowsByNodeID = {3: 10000}
   exitnodes = set()  # the empty set  # FIXME: which is the exit-node? (Is the one that's missing as an end-point from one or more LineStrings)
@@ -69,6 +73,11 @@ elif SCENARIO == 'threenodelinearnetwork':
 #  inflowsByNodeID = {0: 500}
   inflowsByNodeID = {0: 1000}
   exitnodes = {2}
+
+elif SCENARIO == 'threenodelinearnetworkFalseNegativeSEM2':
+  inputfilename = 'threenodelinearnetworkFalseNegativeSEM2.geojson'  # three-node network (with leftmost and rightmost nodes missing to indicate they're exit-nodes) that demonstrates SEM2 finding a false negative - a solution with no congestion where in reality traffic might all take the short left link
+  inflowsByNodeID = {0: 1000}  # centre node is the only one explicitly appearing in the input-file, so takes pointID 0
+  exitnodes = {1, 2}  # left- and righthand nodes, respectively
 
 elif SCENARIO == 'fournodelinearnetworkmissingendpoint':
   inputfilename = 'fournodelinearnetworkMissingEndpoint.geojson'  # four-node linear network with rightmost node missing

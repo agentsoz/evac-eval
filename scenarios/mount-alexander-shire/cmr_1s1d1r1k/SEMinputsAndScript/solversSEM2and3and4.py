@@ -101,7 +101,7 @@ def geoJSONtoAdjacencyMatrix( JSONnetworkfilename, exitnodes ):
         pointsWithCoords[ xy ] = currentPointID
 #        exitnodes.append( currentPointID )  # include the missing Point as an exit-node: all non-missing-point exit-nodes are already specified as a parameter of this function ('geoJSONtoAdjacencyMatrix')  # TODO: confirm that this is what is generally desired
         exitnodes.add( currentPointID )  # include the missing Point as an exit-node: all non-missing-point exit-nodes are already specified as a parameter of this function ('geoJSONtoAdjacencyMatrix')  # TODO: confirm that this is what is generally desired
-        print(f"WARNING: including originally-missing endpoint {xy} of LineString {l} as an exit-node: exitnodes is now {exitnodes}")
+        print(f"WARNING: including originally-missing endpoint (PointID {currentPointID}) {xy} of LineString {l} as an exit-node: exitnodes is now {exitnodes}")
         currentPointID += 1
       else:
 #        print(f"Point {xy} is in pointsWithCoords")
@@ -719,10 +719,10 @@ def fnorm(h, injectionnodes, indexamonginjectionorexitnodes, neighboursofj, exit
 #  congestiononlink = linkcongestion(p, j, flowenteringparent, densityinlink, argsflowfunc)
 def linkcongestion(r, s, flow, density, argsflowfunc):
   # The current measure of congestion, which is zero if the link's density is <= density at capacity and is the link's capacity less its actual flow otherwise, is problematic; for example, a link into which a congestion-zone has flowed upsttream might have very low flow only because its head-node has very low demand (i.e. injection-flow), and this will be measured to be high congestion. A better measure might follow from assessing congestion not on the links but at the injection-nodes, taking it to be the demand (injection-flow) less the total inflow into links of the network (noting that total inflow will be less than demand where one or more of the adjacent links has had its flow reduced by an upstream-propagating congestion-zone).
-  print(f"linkcongestion(): calculating congestion on link {frozenset({r,s})} from flow {flow} and density {density}...")
+#  print(f"linkcongestion(): calculating congestion on link {frozenset({r,s})} from flow {flow} and density {density}...")
   humpdensity = argsflowfunc['tau'][frozenset({r,s})]
-#  print("tau[%s] is %.4f" % ((r,s), argsflowfunc['tau'][(r,s)]))
-  print("tau[%s] is %.4f" % ((r,s), argsflowfunc['tau'][frozenset({r,s})]))
+##  print("tau[%s] is %.4f" % ((r,s), argsflowfunc['tau'][(r,s)]))
+#  print("tau[%s] is %.4f" % ((r,s), argsflowfunc['tau'][frozenset({r,s})]))
 ##  if abs(hr-hs) >= argsflowfunc['tau'][edge]:
 #  if density >= argsflowfunc['tau'][(r,s)]:
   if density >= humpdensity:
@@ -1324,6 +1324,7 @@ def propagateSEM3congestionUpstreamToParents( i, totalflowleavingnodeiDownstream
 
 def propagateSEM4congestionUpstreamToParents( upstreamPropagatingShockFront, a, timeThatShockFrontReachedNodea, parentsOnShortestPathsFromInjectionNodes, qijatnodei, densityijatnodei, qijatnodej, densityijatnodej, speedijatnodej, flowstateijatnodej, argsflowfunc, injectionnodes, b0, indexamonginjectionorexitnodes, propagatingwavefronts, nexttimestepduration ):
   EPS = 1e-3
+  congestionAlertMessage = None  # will change if congestion is detected at an injection-node
   congestedFlowThatHasPropagatedUpstreamToNodea = upstreamPropagatingShockFront['flow']
   print(f"congestedFlowThatHasPropagatedUpstreamToNodea at node {a} is {congestedFlowThatHasPropagatedUpstreamToNodea} veh/hr.")
   initialtotalflowEnteringNodeaFromItsParents = sum([qijatnodej[p,a] for p in parentsOnShortestPathsFromInjectionNodes[a]])
@@ -1338,15 +1339,18 @@ def propagateSEM4congestionUpstreamToParents( upstreamPropagatingShockFront, a, 
     injectionflowata = 0.0
   print(f"injectionflow at node {a} is {injectionflowata:.5f} veh/hr.")
   flowReductionFactor = congestedFlowThatHasPropagatedUpstreamToNodea / (initialtotalflowEnteringNodeaFromItsParents + injectionflowata)  # shall divide congested flow between the links entering node a: the flow in each link, and also by implication the injection-flow, decreases proportionally  # TODO: improve this if not realistic, or find a better method in the literature
-  print(f"flowReductionFactor is {flowReductionFactor}")
+  print(f"flowReductionFactor is congestedFlowThatHasPropagatedUpstreamToNodea / (initialtotalflowEnteringNodeaFromItsParents + injectionflowata) = {congestedFlowThatHasPropagatedUpstreamToNodea} / ({initialtotalflowEnteringNodeaFromItsParents} + {injectionflowata}) = {flowReductionFactor}")
   congestedinjectionflowata = flowReductionFactor * injectionflowata
   if congestedinjectionflowata < injectionflowata:
-    congestionAlertMessage = f"ALERT: at node {a}, congestedinjectionflowata {congestedinjectionflowata} < injectionflowata {injectionflowata} veh/hr: node {a} must be an injection-node, and there is a shock where traffic-flow enters the network there."
+#    congestionAlertMessage = f"ALERT: at node {a}, congestedinjectionflowata {congestedinjectionflowata} < injectionflowata {injectionflowata} veh/hr: node {a} must be an injection-node, and there is a shock where traffic-flow enters the network there."
+    congestionAlertMessage = f"ALERT: at injection-node {a}, congestedinjectionflowata {congestedinjectionflowata} < injectionflowata {injectionflowata} veh/hr: there is a shock where traffic-flow enters the network there."
     print(congestionAlertMessage)
     assert a in injectionnodes
   print(f"Adding to newtotalflowEnteringNodea the congestedinjectionflowata (possibly zero) at node {a} of {congestedinjectionflowata:.5f} veh/hr")
   newtotalflowEnteringNodea += congestedinjectionflowata
-  assert flowReductionFactor < 1.0  # TODO: perhaps is sometimes equal to 1
+#  assert flowReductionFactor < 1.0  # not generally true: flowReductionFactor is sometimes equal to 1
+  assert flowReductionFactor <= 1.0  # TODO: perhaps is sometimes greater than 1
+#  if flowReductionFactor < 1.0:  # if flow is reduced by the congestion, then congestion affects the flow on every link entering node a:
   for p in parentsOnShortestPathsFromInjectionNodes[a]:
     initialflowpa = qijatnodej[p,a]
     print(f"initial flow[{p},{a}] is {initialflowpa}")
@@ -1355,13 +1359,15 @@ def propagateSEM4congestionUpstreamToParents( upstreamPropagatingShockFront, a, 
       continue
     congestedflowpa = flowReductionFactor * initialflowpa
     print(f"congested flow[{p},{a}] is {congestedflowpa}")
-    print(f"As congestion-zone propagates upstream, flow in link [{p},{a}] decreases from {initialflowpa} to {congestedflowpa}")
-    qijatnodej[p,a] = congestedflowpa
-    print(f"qijatnodej[{p},{a}] is now {qijatnodej[p,a]}")
+    if flowReductionFactor < 1.0:
+      print(f"As congestion-zone propagates upstream, flow in link [{p},{a}] decreases from {initialflowpa} to {congestedflowpa}")
+      qijatnodej[p,a] = congestedflowpa
+      print(f"qijatnodej[{p},{a}] is now {qijatnodej[p,a]}")
     print(f"Adding to newtotalflowEnteringNodea the congestedflowpa entering node {a} from its parent {p} of {congestedflowpa:.5f} veh/hr")
     newtotalflowEnteringNodea += congestedflowpa
     edge = frozenset({p,a})
     congesteddensitypa = densityoncongestedbranchoftriangularfundamentaldiagram( congestedflowpa, edge, argsflowfunc )
+#    assert densityijatnodej[edge] != congesteddensitypa
     densityijatnodej[edge] = congesteddensitypa
     print(f"densityijatnodej[{edge}] is now {densityijatnodej[edge]}")
     upstreamflowpa = initialflowpa  # needed to calculate shock-front's new propagation-speed on link (p,a)
@@ -1369,26 +1375,31 @@ def propagateSEM4congestionUpstreamToParents( upstreamPropagatingShockFront, a, 
       upstreamdensitypa = densityonfreeflowbranchoftriangularfundamentaldiagram( upstreamflowpa, edge, argsflowfunc )
     elif flowstateijatnodej[p,a] == 'congestedflowstate':
       upstreamdensitypa = densityoncongestedbranchoftriangularfundamentaldiagram( upstreamflowpa, edge, argsflowfunc )
-    print(f"Calculating propagation-speed: upstreamflowpa is {upstreamflowpa}, upstreamdensitypa is {upstreamdensitypa}, congestedflowpa is {congestedflowpa}, congesteddensitypa is {congesteddensitypa}")
-    shockFrontPropagationSpeed = propagationSpeedOfShockFront( upstreamflowpa, upstreamdensitypa, congestedflowpa, congesteddensitypa )
-    if shockFrontPropagationSpeed < 0.0:
-      upordownstreamText = 'travels upstream'
-    elif shockFrontPropagationSpeed > 0.0:
-      upordownstreamText = 'travels downstream'
-    else:
-      upordownstreamText = 'is stationary'
-    print(f"shockFrontPropagationSpeed is {shockFrontPropagationSpeed}: the front {upordownstreamText}.")
-    assert shockFrontPropagationSpeed < 0.0
-    if shockFrontPropagationSpeed == 0.0:  # can be zero if, for example, the link's free flow upstream of the shock-front is zero, as then the "congested" flow is also zero
-      print(f"upstreamflowpa {upstreamflowpa} = congestedflowpa {congestedflowpa}: there is no real congestion.")
-#    speedijatnodej[frozenset({p,a})] = qijatnodej[p,a] / densityijatnodej[edge]
-    speedijatnodej[edge] = congestedflowpa / congesteddensitypa
-    flowstateijatnodej[p,a] = 'congestedflowstate'
-    print(f"densityijatnodej{edge} is now {densityijatnodej[edge]}, speedijatnodej is now {speedijatnodej[edge]}, flowstateijatnodej[{p},{a}] is {flowstateijatnodej[p,a]}.")
-    lengthoflinkpa = argsflowfunc['linklength'][ frozenset({p,a}) ]
-    timetillupstreamnodeonlink = -lengthoflinkpa / shockFrontPropagationSpeed
-##    propagateSEM3congestionUpstreamToParents( p, congestedflowpa, parentsOnShortestPathsFromInjectionNodes, qijatnodej, densityijatnodej, speedijatnodej, argsflowfunc, injectionnodes, b0, indexamonginjectionorexitnodes )
-    propagatingwavefronts.append( {'time': timeThatShockFrontReachedNodea, 'currentlink': frozenset({p,a}), 'sourcenodeonlink': a, 'destinationnodeonlink': p, 'distancereacheddownlink': 0.0, 'propagationspeed': -shockFrontPropagationSpeed, 'flow': congestedflowpa, 'density': congesteddensitypa, 'timetilldestinationnodeonlink': lengthoflinkpa/(-shockFrontPropagationSpeed), 'nodesonpathtoanexit': 'upstream-propagating shock-front, so not applicable', 'flowaheadofwavefront': upstreamflowpa, 'densityaheadofwavefront': upstreamdensitypa} )  # 'propagationspeed' of a propagating wavefront is in the direction of its travel, so is always positive
+    if flowReductionFactor == 1.0:  # TODO: perhaps replace with 'if abs(flowReductionFactor - 1.0) <= EPS:'
+      assert abs(upstreamflowpa - congestedflowpa) <= EPS
+      print(f"upstreamdensitypa is {upstreamdensitypa}, congesteddensitypa is {congesteddensitypa}.")
+      assert abs(upstreamdensitypa - congesteddensitypa) <= EPS
+    elif flowReductionFactor < 1.0:
+      print(f"Calculating propagation-speed: upstreamflowpa is {upstreamflowpa}, upstreamdensitypa is {upstreamdensitypa}, congestedflowpa is {congestedflowpa}, congesteddensitypa is {congesteddensitypa}")
+      shockFrontPropagationSpeed = propagationSpeedOfShockFront( upstreamflowpa, upstreamdensitypa, congestedflowpa, congesteddensitypa )
+      if shockFrontPropagationSpeed < 0.0:
+        upordownstreamText = 'travels upstream'
+      elif shockFrontPropagationSpeed > 0.0:
+        upordownstreamText = 'travels downstream'
+      else:
+        upordownstreamText = 'is stationary'
+      print(f"shockFrontPropagationSpeed is {shockFrontPropagationSpeed}: the front {upordownstreamText}.")
+      assert shockFrontPropagationSpeed < 0.0
+      if shockFrontPropagationSpeed == 0.0:  # can be zero if, for example, the link's free flow upstream of the shock-front is zero, as then the "congested" flow is also zero
+        print(f"upstreamflowpa {upstreamflowpa} = congestedflowpa {congestedflowpa}: there is no real congestion.")
+#      speedijatnodej[frozenset({p,a})] = qijatnodej[p,a] / densityijatnodej[edge]
+      speedijatnodej[edge] = congestedflowpa / congesteddensitypa
+      flowstateijatnodej[p,a] = 'congestedflowstate'
+      print(f"densityijatnodej{edge} is now {densityijatnodej[edge]}, speedijatnodej is now {speedijatnodej[edge]}, flowstateijatnodej[{p},{a}] is {flowstateijatnodej[p,a]}.")
+      lengthoflinkpa = argsflowfunc['linklength'][ frozenset({p,a}) ]
+      timetillupstreamnodeonlink = -lengthoflinkpa / shockFrontPropagationSpeed
+##      propagateSEM3congestionUpstreamToParents( p, congestedflowpa, parentsOnShortestPathsFromInjectionNodes, qijatnodej, densityijatnodej, speedijatnodej, argsflowfunc, injectionnodes, b0, indexamonginjectionorexitnodes )
+      propagatingwavefronts.append( {'time': timeThatShockFrontReachedNodea, 'currentlink': frozenset({p,a}), 'sourcenodeonlink': a, 'destinationnodeonlink': p, 'distancereacheddownlink': 0.0, 'propagationspeed': -shockFrontPropagationSpeed, 'flow': congestedflowpa, 'density': congesteddensitypa, 'timetilldestinationnodeonlink': lengthoflinkpa/(-shockFrontPropagationSpeed), 'nodesonpathtoanexit': 'upstream-propagating shock-front, so not applicable', 'flowaheadofwavefront': upstreamflowpa, 'densityaheadofwavefront': upstreamdensitypa} )  # 'propagationspeed' of a propagating wavefront is in the direction of its travel, so is always positive
 
   upstreamPropagatingShockFront['timetilldestinationnodeonlink'] = 0.0
   upstreamPropagatingShockFront['distancereacheddownlink'] += upstreamPropagatingShockFront['propagationspeed'] * nexttimestepduration
@@ -1397,7 +1408,7 @@ def propagateSEM4congestionUpstreamToParents( upstreamPropagatingShockFront, a, 
   assert abs(upstreamPropagatingShockFront['distancereacheddownlink'] - lengthofcurrentlink) <= EPS
   print(f"As it propagates upstream and reaches node {a}, wavefront {upstreamPropagatingShockFront} is removed from propagatingwavefronts.")
   propagatingwavefronts.remove( upstreamPropagatingShockFront )
-  print(f"propagatingwavefronts is {propagatingwavefronts}")
+  print(f"propagatingwavefronts is now {propagatingwavefronts}")
 
   print(f"newtotalflowEnteringNodea is {newtotalflowEnteringNodea} veh/hr, congestedFlowThatHasPropagatedUpstreamToNodea is {congestedFlowThatHasPropagatedUpstreamToNodea} veh/hr.")
 #  if congestedFlowThatHasPropagatedUpstreamToNodea < newtotalflowEnteringNodea:
@@ -1524,16 +1535,18 @@ def examineCandidateWavefrontsForIntersectionWithThisWavefront(thiswf, candidate
       timeTillIntersected = (L - distreacheddownlink_thiswf - distreacheddownlink_cwf) / (speed_thiswf + speed_cwf)
     else:  # the intersecting wavefronts are both propagating upstream
       timeTillIntersected = (distreacheddownlink_cwf - distreacheddownlink_thiswf) / (speed_thiswf - speed_cwf)
-    assert timeTillIntersected > 0.0  # TODO: might not be true if both wavefronts are propagating upstream and cwf is behind thiswf, i.e. hasn't propagated as great a distance up the link
     print(f"timeTillIntersected is {timeTillIntersected} hours")
+    assert timeTillIntersected > 0.0  # TODO: isn't true if both wavefronts are propagating upstream and cwf is behind thiswf, i.e. hasn't propagated as great a distance up the link
     if timeTillIntersected < minTimeForAWavefrontToIntersectWithAnotherOnSameLink and timeTillIntersected <= minTimeForAWavefrontToReachNextNodeOnPath:  # for the intersection to be such, it must occur by the time (before?) any propagating wavefront reaches its next node (the node at the end of its link)
       assert timeTillIntersected < minTimeForAWavefrontToReachNextNodeOnPath  # TODO: it would be convenient if this were always true, for otherwise nextwavefronttopropagate might reach its destination-node simultaneously with intersecting the other wavefront on the link, although that case might not be too hard to sort out
       minTimeForAWavefrontToIntersectWithAnotherOnSameLink = timeTillIntersected
 #      print(f"minTimeForThisWavefrontToIntersectWithAnotherOnSameLink is {minTimeForThisWavefrontToIntersectWithAnotherOnSameLink} hours")
       print(f"minTimeForAWavefrontToIntersectWithAnotherOnSameLink is {minTimeForAWavefrontToIntersectWithAnotherOnSameLink} hours")
+      assert cwf['currentlink'] == thiswf['currentlink']
       nextwavefronttopropagate = thiswf
       wavefrontIntersected = cwf
       print(f"wavefrontIntersected is {wavefrontIntersected}")
+      print(f"L of {thiswf['currentlink']} is {L} km.")
       if cwf['nodesonpathtoanexit'][:32] != 'upstream-propagating shock-front':
         pointReachedByNextPropagatingWaveFront = 'intersect with wavefront propagating in opposite direction (downstream) on same link'
       else:  # the intersecting wavefronts are both propagating upstream
@@ -1570,7 +1583,8 @@ def calculateNextTimestepDuration(propagatingwavefronts, argsflowfunc):
   minTimeForAWavefrontToIntersectWithAnotherOnSameLink = LARGEVAL
   for edgePropagatingOn in argsflowfunc['lK'].keys():
     upstreamPropagatingWavefrontsOnLink = [wv for wv in propagatingwavefronts if wv['currentlink'] == edgePropagatingOn and wv['nodesonpathtoanexit'][:32] == 'upstream-propagating shock-front']
-    print(f"upstreamPropagatingWavefrontsOnLink {edgePropagatingOn} is {upstreamPropagatingWavefrontsOnLink}")
+    if upstreamPropagatingWavefrontsOnLink:
+      print(f"upstreamPropagatingWavefrontsOnLink {edgePropagatingOn} is {upstreamPropagatingWavefrontsOnLink}")
     if not upstreamPropagatingWavefrontsOnLink: continue
     wavefrontsOnLink = [wv for wv in propagatingwavefronts if wv['currentlink'] == edgePropagatingOn]
     print(f"Wavefronts on link {edgePropagatingOn} are {wavefrontsOnLink}.")
@@ -1583,6 +1597,7 @@ def calculateNextTimestepDuration(propagatingwavefronts, argsflowfunc):
     # Generate each pair of wavefronts that will potentially intersect (no pair will be generated more than once by the following procedure):
 #    for thiswf in wavefrontsOnLink:
     for thiswf in upstreamPropagatingWavefrontsOnLink:  # any pair of intersecting wavefronts will contain at least one that's propagating upstream
+      assert L == argsflowfunc['linklength'][ thiswf['currentlink'] ]
       speed_thiswf = thiswf['propagationspeed']  # propagation-speed of 'thiswf'
       distreacheddownlink_thiswf = thiswf['distancereacheddownlink']
 #      print(f"speed_thiswf is {speed_thiswf} km/hr, distreacheddownlink_thiswf is {distreacheddownlink_thiswf} km/hr")
@@ -1592,8 +1607,9 @@ def calculateNextTimestepDuration(propagatingwavefronts, argsflowfunc):
         candidateWavefrontsToIntersect = [wv for wv in wavefrontsOnLink if wv['nodesonpathtoanexit'][:32] == 'upstream-propagating shock-front']
         print(f"candidateWavefrontsToIntersect is {candidateWavefrontsToIntersect}")
         (minTimeForAWavefrontToIntersectWithAnotherOnSameLink, nextwavefronttopropagate, wavefrontIntersected, pointReachedByNextPropagatingWaveFront) = examineCandidateWavefrontsForIntersectionWithThisWavefront(thiswf, candidateWavefrontsToIntersect, nextwavefronttopropagate, wavefrontIntersected, L, speed_thiswf, distreacheddownlink_thiswf, minTimeForAWavefrontToIntersectWithAnotherOnSameLink, minTimeForAWavefrontToReachNextNodeOnPath, pointReachedByNextPropagatingWaveFront)
-      else:  # thiswf is upstream-propagating; can potentially intersect only with slower upstream-propagating wavefronts on same link (can intersect with downstream-propagating wavefronts, but such an intersection will be found by the case above)
-        candidateWavefrontsToIntersect = [wv for wv in wavefrontsOnLink if wv['nodesonpathtoanexit'][:32] != 'upstream-propagating shock-front' or wv['nodesonpathtoanexit'][:32] == 'upstream-propagating shock-front' and wv['propagationspeed'] < thiswf['propagationspeed']]  # 'wv != thiswf' is implied by the condition on wavefronts' speeds
+      else:  # thiswf is upstream-propagating; can potentially intersect only with slower upstream-propagating wavefronts on same link that are a greater distance up the link (can intersect with downstream-propagating wavefronts, but such an intersection will be found by the case above)
+#        candidateWavefrontsToIntersect = [wv for wv in wavefrontsOnLink if wv['nodesonpathtoanexit'][:32] != 'upstream-propagating shock-front' or wv['nodesonpathtoanexit'][:32] == 'upstream-propagating shock-front' and wv['propagationspeed'] < thiswf['propagationspeed']]  # 'wv != thiswf' is implied by the condition on wavefronts' speeds
+        candidateWavefrontsToIntersect = [wv for wv in wavefrontsOnLink if wv['nodesonpathtoanexit'][:32] != 'upstream-propagating shock-front' or wv['nodesonpathtoanexit'][:32] == 'upstream-propagating shock-front' and wv['propagationspeed'] < thiswf['propagationspeed'] and wv['distancereacheddownlink'] > thiswf['distancereacheddownlink']]  # 'wv != thiswf' is implied by the condition on wavefronts' speeds
         print(f"candidateWavefrontsToIntersect is {candidateWavefrontsToIntersect}")
         (minTimeForAWavefrontToIntersectWithAnotherOnSameLink, nextwavefronttopropagate, wavefrontIntersected, pointReachedByNextPropagatingWaveFront) = examineCandidateWavefrontsForIntersectionWithThisWavefront(thiswf, candidateWavefrontsToIntersect, nextwavefronttopropagate, wavefrontIntersected, L, speed_thiswf, distreacheddownlink_thiswf, minTimeForAWavefrontToIntersectWithAnotherOnSameLink, minTimeForAWavefrontToReachNextNodeOnPath, pointReachedByNextPropagatingWaveFront)
 #        for cwf in candidateWavefrontsToIntersect:
@@ -1626,6 +1642,8 @@ def calculateNextTimestepDuration(propagatingwavefronts, argsflowfunc):
     pointReachedByNextPropagatingWaveFront = f'reach destination-node {nextwavefronttopropagate["destinationnodeonlink"]} at end of link'
 
   print(f"nexttimestepduration is {nexttimestepduration} hours, pointReachedByNextPropagatingWaveFront is '{pointReachedByNextPropagatingWaveFront}'")
+#  assert nexttimestepduration > 0.0
+  assert nexttimestepduration > 1e-5
 
 #  print(f"nextwavefronttopropagate, which in the next time-step will either reach the next node on its shortest path to an exit or will first intersect with another wavefront propagating on the same link, is {nextwavefronttopropagate}")
   print(f"nextwavefronttopropagate, which in the next time-step will {pointReachedByNextPropagatingWaveFront}, is {nextwavefronttopropagate}")
@@ -1698,14 +1716,71 @@ def calculateNextTimestepDuration(propagatingwavefronts, argsflowfunc):
   return (nexttimestepduration, pointReachedByNextPropagatingWaveFront, nextwavefronttopropagate, wavefrontIntersected)
 
 
+def printSimulationClockTime(timestepcount, simulationclocktime):
+  print(f"==============Time-step {timestepcount}: simulationclocktime is {simulationclocktime} hours ({simulationclocktime*3600} seconds).")
+
+
+def verifyOnEveryLinkThatPropagatingFlowMatchesqijValues(propagatingwavefronts, argsflowfunc, qijatnodei, qijatnodej ):
+  for edgePropagatingOn in argsflowfunc['lK'].keys():
+    downstreamPropagatingWavefrontsOnLinkDict = {wv['distancereacheddownlink']: wv for wv in propagatingwavefronts if wv['currentlink'] == edgePropagatingOn and wv['nodesonpathtoanexit'][:32] != 'upstream-propagating shock-front'}
+    print(f"downstreamPropagatingWavefrontsOnLinkDict {edgePropagatingOn} is {downstreamPropagatingWavefrontsOnLinkDict}")
+##    wavefrontIntersected = min(catchuptime, catchuptime.get)  # obtain key in dictionary 'catchuptime' having the minimum value; the default for 'min' is to give the minimum key, but here the keys are ordered by the function catchuptime.get, i.e. ordered by the keys' dictionary-values (see https://docs.python.org/3/library/functions.html#min)
+    if downstreamPropagatingWavefrontsOnLinkDict:
+      leastDownstreamWavefrontDistance = min(downstreamPropagatingWavefrontsOnLinkDict)  # 'min' obtains key in dictionary 'downstreamPropagatingWavefrontsOnLinkDict' having the minimum value, i.e. distancereacheddownlink
+      farthestDownstreamWavefrontDistance = max(downstreamPropagatingWavefrontsOnLinkDict)
+      leastDownstreamWavefront = downstreamPropagatingWavefrontsOnLinkDict[ leastDownstreamWavefrontDistance ]
+      farthestDownstreamWavefront = downstreamPropagatingWavefrontsOnLinkDict[ farthestDownstreamWavefrontDistance ]
+#      print(f"farthestDownstreamWavefront is {farthestDownstreamWavefront}")
+      print(f"leastDownstreamWavefrontDistance is {leastDownstreamWavefrontDistance}")
+      print(f"farthestDownstreamWavefrontDistance is {farthestDownstreamWavefrontDistance}")
+      a = leastDownstreamWavefront['sourcenodeonlink']
+      b = leastDownstreamWavefront['destinationnodeonlink']
+      print(f"leastDownstreamWavefront['flow'] is {leastDownstreamWavefront['flow']}, qijatnodei[{a},{b}] is {qijatnodei[a,b]}")
+      assert leastDownstreamWavefront['flow'] == qijatnodei[a,b]
+      flowAheadOfFarthestDownstreamWavefront = farthestDownstreamWavefront['flowaheadofwavefront']
+    else:
+      leastDownstreamWavefront = None
+      farthestDownstreamWavefront = None
+      flowAheadOfFarthestDownstreamWavefront = None
+    upstreamPropagatingWavefrontsOnLinkDict = {wv['distancereacheddownlink']: wv for wv in propagatingwavefronts if wv['currentlink'] == edgePropagatingOn and wv['nodesonpathtoanexit'][:32] == 'upstream-propagating shock-front'}
+    if upstreamPropagatingWavefrontsOnLinkDict:
+      print(f"upstreamPropagatingWavefrontsOnLinkDict {edgePropagatingOn} is {upstreamPropagatingWavefrontsOnLinkDict}")
+    if upstreamPropagatingWavefrontsOnLinkDict:
+      leastUpstreamShockfrontDistance = min(upstreamPropagatingWavefrontsOnLinkDict)  # 'min' obtains key in dictionary 'upstreamPropagatingWavefrontsOnLinkDict' having the minimum value, i.e. distancereacheddownlink
+      farthestUpstreamShockfrontDistance = max(upstreamPropagatingWavefrontsOnLinkDict)
+      leastUpstreamShockfront = upstreamPropagatingWavefrontsOnLinkDict[ leastUpstreamShockfrontDistance ]
+      farthestUpstreamShockfront = upstreamPropagatingWavefrontsOnLinkDict[ farthestUpstreamShockfrontDistance ]
+#      print(f"farthestUpstreamShockfront is {farthestUpstreamShockfront}")
+      print(f"leastUpstreamShockfrontDistance is {leastUpstreamShockfrontDistance}")
+      print(f"farthestUpstreamShockfrontDistance is {farthestUpstreamShockfrontDistance}")
+      a = leastUpstreamShockfront['destinationnodeonlink']
+      b = leastUpstreamShockfront['sourcenodeonlink']
+      print(f"leastUpstreamShockfront['flow'] is {leastUpstreamShockfront['flow']}, qijatnodej[{a},{b}] is {qijatnodej[a,b]}")
+      assert leastUpstreamShockfront['flow'] == qijatnodej[a,b]
+      flowAheadOfFarthestUpstreamShockfront = farthestUpstreamShockfront['flowaheadofwavefront']
+    else:
+      leastUpstreamShockfront = None
+      farthestUpstreamShockfront = None
+      flowAheadOfFarthestUpstreamShockfront = None
+#    if not upstreamPropagatingWavefrontsOnLinkDict: continue
+#    L = argsflowfunc['linklength'][ edgePropagatingOn ]
+    if flowAheadOfFarthestDownstreamWavefront and flowAheadOfFarthestUpstreamShockfront:
+      assert flowAheadOfFarthestDownstreamWavefront == flowAheadOfFarthestUpstreamShockfront
+#  sys.exit()
+
+
 def evolutionofwaveandshockfronts( inflowsandflowperiodsByNodeID, simulDuration, parentsOnShortestPathsFromInjectionNodes, qijatnodei, densityijatnodei, qijatnodej, densityijatnodej, speedijatnodej, flowstateijatnodej, argsflowfunc, exitnodes, b0, indexamonginjectionorexitnodes, shortestPathToAnExit, flowijfunc, flowfunc, injectionnodes, outflowsByNodeID ):
   EPS = 1e-6
   INITIALTIMESTAMP = 0.0
-  congestionAlertMessage = None  # will change if congestion is detected at an injection-node
+  congestionAlertMessages = []  # will change if congestion is detected at an injection-node
 #  propagatingwavefronts = {}
 #  for edge in argsflowfunc['lK']:
 #    propagatingwavefronts[edge] = []
   propagatingwavefronts = []
+#  print(f"inflowsandflowperiodsByNodeID.values() is {inflowsandflowperiodsByNodeID.values()}")
+  totalinflows = sum(d['inflow'] for d in inflowsandflowperiodsByNodeID.values())
+  print(f"totalinflows is {totalinflows} veh/hr.")
+#  sys.exit()
   # Create at time t=0 the initial wavefronts at injection-nodes:
   for a in inflowsandflowperiodsByNodeID:
     print(f"For node {a}, inflowsandflowperiodsByNodeID[a] is {inflowsandflowperiodsByNodeID[a]}")
@@ -1770,7 +1845,8 @@ def evolutionofwaveandshockfronts( inflowsandflowperiodsByNodeID, simulDuration,
   print(f"propagatingwavefronts is {propagatingwavefronts}")
 
   simulationclocktime = INITIALTIMESTAMP
-  print(f"==============simulationclocktime is {simulationclocktime} hours ({simulationclocktime*3600} seconds).")
+  timestepcount = 0
+  printSimulationClockTime(timestepcount, simulationclocktime)
   cumulNumVehiclesToHaveDepartedLinkDuringSimulation = {}
   for (i, j) in qijatnodej:
     cumulNumVehiclesToHaveDepartedLinkDuringSimulation[i, j] = 0
@@ -1790,6 +1866,14 @@ def evolutionofwaveandshockfronts( inflowsandflowperiodsByNodeID, simulDuration,
       print(f"numVehiclesDepartingLinkDuringThisTimestep is {numVehiclesDepartingLinkDuringThisTimestep}")
       cumulNumVehiclesToHaveDepartedLinkDuringSimulation[i, j] += numVehiclesDepartingLinkDuringThisTimestep
       print(f"cumulNumVehiclesToHaveDepartedLinkDuringSimulation[{i}, {j}] is now {cumulNumVehiclesToHaveDepartedLinkDuringSimulation[i, j]}")
+#      print(f"qijatnodei[{i},{j}] is {qijatnodei[i,j]}")
+#      assert qijatnodei[i,j] <= totalinflows
+#      print(f"qijatnodej[{i},{j}] is {qijatnodej[i,j]}")
+#      assert qijatnodej[i,j] <= totalinflows
+
+    print(f"cumulNumVehiclesToHaveDepartedLinkDuringSimulation is {cumulNumVehiclesToHaveDepartedLinkDuringSimulation}")
+    print(f"qijatnodei is {qijatnodei}")
+    print(f"qijatnodej is {qijatnodej}")
 
     assert nextwavefronttopropagate['propagationspeed'] > 0.0  # wavefront's propagation-speed in direction of its travel
     a = nextwavefronttopropagate['sourcenodeonlink']
@@ -1805,14 +1889,14 @@ def evolutionofwaveandshockfronts( inflowsandflowperiodsByNodeID, simulDuration,
     if pointReachedByNextPropagatingWaveFront[:22] == 'reach destination-node':
       # The chosen next wavefront to propagate reaches its current link's end-node at the end of this time-step, so propagate it further, either up- or downstream, into the shortest-path tree:
       if nextwavefronttopropagate['nodesonpathtoanexit'][:32] == 'upstream-propagating shock-front':
-        numnodesremainingtobetraversedonpath = 'upstream-propagating shock-front, so not applicable'
 #        numnodesremainingtobetraversedonpath = 0
+        numnodesremainingtobetraversedonpath = 'upstream-propagating shock-front, so not applicable'
       else:  # nextwavefronttopropagate is downstream-propagating
         indexInPathOfCurrentNode = nextwavefronttopropagate['nodesonpathtoanexit'].index(b)
         numnodesremainingtobetraversedonpath = len(nextwavefronttopropagate['nodesonpathtoanexit']) - 1 - indexInPathOfCurrentNode
       if isinstance(numnodesremainingtobetraversedonpath, int) and numnodesremainingtobetraversedonpath > 0:  # update downstream-propagating wavefront as it passes through node a to the next link on its path
         assert nextwavefronttopropagate['nodesonpathtoanexit'][:32] != 'upstream-propagating shock-front'
-#        gotonextnodeonpath()
+        wavefrontflowdifferenceab = nextwavefronttopropagate['flow'] - nextwavefronttopropagate['flowaheadofwavefront']  # amount by which, when nextwavefronttopropagate reaches node b, flow leaving node b towards c will increase
         c = nextwavefronttopropagate['nodesonpathtoanexit'][ indexInPathOfCurrentNode + 1]
 #        print(f"Next onward node on shortest path is c = {c}")
         nextlinkonpath = frozenset({b, c})
@@ -1821,8 +1905,10 @@ def evolutionofwaveandshockfronts( inflowsandflowperiodsByNodeID, simulDuration,
         print(f"At node {b}, wavefront shall encounter capacity on next link {nextlinkonpath} of {nextlinkcapacity} veh/hr.")
 #        if wavefrontflowab <= nextlinkcapacity :
 #          print(f"This next link's capacity of {nextlinkcapacity} is no lower than the wavefront's flow of {nextwavefronttopropagate['flow']} veh/hr, so no shock-front or bottleneck results.")
-        if wavefrontflowab <= nextlinkcapacity - qijatnodei[b,c]:  # TODO: flow from a into b towards c cannot exceed edge {b,c}'s capacity less the flow already leaving b towards c
-          print(f"The wavefront's flow of {nextwavefronttopropagate['flow']} veh/hr is no greater than the next link's capacity of {nextlinkcapacity} less existing flow qijatnodei[{b},{c}] of {qijatnodei[b,c]} leaving {b} towards {c}, so no shock-front or bottleneck results.")
+#        if wavefrontflowab <= nextlinkcapacity - qijatnodei[b,c]:  # (incorrect) flow from a into b towards c cannot exceed edge {b,c}'s capacity less the flow already leaving b towards c
+        if wavefrontflowdifferenceab <= nextlinkcapacity - qijatnodei[b,c]:  # TODO: wavefront-flow minus flowahead from a into b towards c cannot exceed edge {b,c}'s capacity less the flow already leaving b towards c
+#          print(f"The wavefront's flow of {nextwavefronttopropagate['flow']} veh/hr is no greater than the next link's capacity of {nextlinkcapacity} less existing flow qijatnodei[{b},{c}] of {qijatnodei[b,c]} leaving {b} towards {c}, so no shock-front or bottleneck results.")
+          print(f"The wavefront's flow of {nextwavefronttopropagate['flow']} veh/hr less flowaheadofwavefront {nextwavefronttopropagate['flowaheadofwavefront']} is no greater than the next link's capacity of {nextlinkcapacity} less existing flow qijatnodei[{b},{c}] of {qijatnodei[b,c]} leaving {b} towards {c}, so no shock-front or bottleneck results.")
           # The wavefront traverses node b and enters the next link, perhaps changing its flow, propagation-speed, and density:
 #          freeflowinnextlink = nextlinkcapacity
           # Now that wavefront has reached the end of its current link, update qijatnodej, densityijatnodej, and speedijatnodej as they are at the link's departing-end:
@@ -1834,10 +1920,11 @@ def evolutionofwaveandshockfronts( inflowsandflowperiodsByNodeID, simulDuration,
           print(f"qijatnodej[{a}, {b}] is now {qijatnodej[a, b]} veh/hr, densityijatnodej[{edge}] is {densityijatnodej[edge]}, speedijatnodej[{edge}] is {speedijatnodej[edge]}, flowstateijatnodej[{a}, {b}] is {flowstateijatnodej[a, b]}.")
 #          qijatnodei[b,c] += wavefrontflowab  # TODO: correct to comment out?
 #          print(f"After increasing by {wavefrontflowab}, qijatnodei[{b},{c}] is now {qijatnodei[b,c]} veh/hr.")
-        else:  # wavefrontflowab > nextlinkcapacity - qijatnodei[b,c]
+#        else:  # wavefrontflowab > nextlinkcapacity - qijatnodei[b,c]
+        else:  # wavefrontflowdifferenceab > nextlinkcapacity - qijatnodei[b,c]
 #          print(f"This next link's capacity of {nextlinkcapacity} is lower than the wavefront's flow of {nextwavefronttopropagate['flow']} veh/hr, so a bottleneck results: an upstream-propagating shock-front is created, and the wavefront's flow will be reduced before propagating down the next link.")
-#          nextwavefronttopropagate['flow'] = nextlinkcapacity  # TODO: (see 'if' a few lines above) flow from a into b towards c cannot exceed edge {b,c}'s capacity less the flow already leaving b towards c
-          print(f"The wavefront's flow of {nextwavefronttopropagate['flow']} veh/hr exceeds (by {nextwavefronttopropagate['flow']-nextlinkcapacity+qijatnodei[b,c]}) the next link's capacity of {nextlinkcapacity} less existing flow qijatnodei[{b},{c}] of {qijatnodei[b,c]} leaving {b} towards {c}, so a bottleneck results: an upstream-propagating shock-front is created, and the wavefront's flow will be reduced before propagating down the next link.")
+#          print(f"The wavefront's flow of {nextwavefronttopropagate['flow']} veh/hr exceeds (by {nextwavefronttopropagate['flow']-nextlinkcapacity+qijatnodei[b,c]}) the next link's capacity of {nextlinkcapacity} less existing flow qijatnodei[{b},{c}] of {qijatnodei[b,c]} leaving {b} towards {c}, so a bottleneck results: an upstream-propagating shock-front is created, and the wavefront's flow will be reduced before propagating down the next link.")
+          print(f"The wavefront's flow of {nextwavefronttopropagate['flow']} veh/hr less flowaheadofwavefront {nextwavefronttopropagate['flowaheadofwavefront']} exceeds (by {nextwavefronttopropagate['flow']-nextlinkcapacity+qijatnodei[b,c]}) the next link's capacity of {nextlinkcapacity} less existing flow qijatnodei[{b},{c}] of {qijatnodei[b,c]} leaving {b} towards {c}, so a bottleneck results: an upstream-propagating shock-front is created, and the wavefront's flow will be reduced before propagating down the next link.")
 #          nextwavefronttopropagate['flow'] = nextlinkcapacity - qijatnodei[b,c] # TODO: (see 'if' a few lines above) flow from a into b towards c cannot exceed edge {b,c}'s capacity less the flow already leaving b towards c
           nextwavefronttopropagate['flow'] = nextlinkcapacity  # flow from b towards c is now the edge {b,c}'s capacity
           assert nextwavefronttopropagate['flow'] == nextlinkcapacity
@@ -1847,6 +1934,7 @@ def evolutionofwaveandshockfronts( inflowsandflowperiodsByNodeID, simulDuration,
           print(f"congested flow[{a}, {b}] is {congestedflowab} veh/hr")
           print(f"As congestion-zone propagates upstream, flow in link [{a}, {b}] will decrease from {wavefrontflowab} to {congestedflowab} veh/hr")
           # Now that wavefront has reached the end of its current link, update qijatnodej, densityijatnodej, and speedijatnodej as they are at the link's departing-end:
+#          assert abs(qijatnodej[a, b] - congestedflowab) > EPS  # not generally true
           qijatnodej[a, b] = congestedflowab
 #          print(f"edge is {edge}, propagatingwavefronts is {propagatingwavefronts}")
 #          assert len( [wv for wv in propagatingwavefronts if wv['currentlink']==edge] ) == 1  # TODO: this assertion might prove to be not generally correct
@@ -1899,26 +1987,74 @@ def evolutionofwaveandshockfronts( inflowsandflowperiodsByNodeID, simulDuration,
         nextwavefronttopropagate['timetilldestinationnodeonlink'] = lengthofnextlink / nextwavefronttopropagate['propagationspeed']
 #        nextwavefronttopropagate['flowaheadofwavefront'] = 0.0  # TODO: the flow and density ahead of nextwavefronttopropagate might be greater than zero if there was already a flow out of b towards c before this wavefront arrived at b
         nextwavefronttopropagate['flowaheadofwavefront'] = qijatnodei[b,c]
-        assert nextwavefronttopropagate['flowaheadofwavefront'] == qijatnodei[b,c]
 #        nextwavefronttopropagate['densityaheadofwavefront'] = 0.0
         nextwavefronttopropagate['densityaheadofwavefront'] = densityijatnodei[b,c]
-        assert nextwavefronttopropagate['densityaheadofwavefront'] == densityijatnodei[b,c]
         nextwavefronttopropagate['density'] = nextwavefronttopropagate['flow'] / nextwavefronttopropagate['propagationspeed']
 #        if wavefrontflowab <= nextlinkcapacity - qijatnodei[b,c]:  # TODO: flow from a into b towards c cannot exceed edge {b,c}'s capacity less the flow already leaving b towards c
-        qijatnodei[b,c] += wavefrontflowab
-        if qijatnodei[b,c] >= nextlinkcapacity:
+        originalqijatnodei = qijatnodei[b,c]
+        print(f"Before nextwavefronttopropagate reaches node {b}, qijatnodei[{b},{c}] is {qijatnodei[b,c]}, wavefrontflowab is {wavefrontflowab}.")
+#        qijatnodei[b,c] += wavefrontflowab
+#        if qijatnodei[b,c] >= nextlinkcapacity:
+#          qijatnodei[b,c] = nextlinkcapacity
+#          print(f"qijatnodei[{b},{c}] is now {nextlinkcapacity} veh/hr.")
+#          assert qijatnodei[b,c] == nextlinkcapacity
+#        else:
+#          print(f"After increasing by {wavefrontflowab}, qijatnodei[{b},{c}] is now {qijatnodei[b,c]} veh/hr.")
+#          assert qijatnodei[b,c] < nextlinkcapacity
+#        if qijatnodei[b,c] <= nextlinkcapacity - wavefrontflowab:
+        if qijatnodei[b,c] <= nextlinkcapacity - wavefrontflowdifferenceab:
+#          qijatnodei[b,c] += wavefrontflowab
+          qijatnodei[b,c] += wavefrontflowdifferenceab
+#          print(f"After increasing by wavefrontflowab {wavefrontflowab}, qijatnodei[{b},{c}] is now {qijatnodei[b,c]} veh/hr.")
+          print(f"After increasing by wavefrontflowdifferenceab {wavefrontflowdifferenceab}, qijatnodei[{b},{c}] is now {qijatnodei[b,c]} veh/hr.")
+          flowincrease = qijatnodei[b,c] - originalqijatnodei
+          try:
+            assert flowincrease == wavefrontflowdifferenceab  # amount by which, when nextwavefronttopropagate reaches node b, flow leaving node b towards c will increase
+          except:
+            print(f"flowincrease is {flowincrease}, wavefrontflowdifferenceab is {wavefrontflowdifferenceab} veh/hr.")
+            raise
+        elif qijatnodei[b,c] < nextlinkcapacity:
           qijatnodei[b,c] = nextlinkcapacity
-          print(f"qijatnodei[{b},{c}] is now {nextlinkcapacity} veh/hr.")
-          assert qijatnodei[b,c] == nextlinkcapacity
-        else:
-          print(f"After increasing by {wavefrontflowab}, qijatnodei[{b},{c}] is now {qijatnodei[b,c]} veh/hr.")
-          assert qijatnodei[b,c] < nextlinkcapacity
-#    upstreamfreedensitypi = densityonfreeflowbranchoftriangularfundamentaldiagram( upstreamfreeflowpi, edge, argsflowfunc )
+          print(f"qijatnodei[{b},{c}] can't increase by wavefrontflowab {wavefrontflowab} without exceeding nextlinkcapacity {nextlinkcapacity}, so qijatnodei[{b},{c}] is now {nextlinkcapacity} veh/hr.")
+        elif qijatnodei[b,c] == nextlinkcapacity:
+          print(f"WARNING: qijatnodei[{b},{c}] is already at nextlinkcapacity {nextlinkcapacity}, so can't increase by wavefrontflowab {wavefrontflowab} or indeed at all: qijatnodei[{b},{c}] is UNCHANGED from {nextlinkcapacity} veh/hr.")
         densityijatnodei[b,c] = densityonfreeflowbranchoftriangularfundamentaldiagram( qijatnodei[b,c], frozenset({b,c}), argsflowfunc )
         print(f"densityijatnodei[{b},{c}] is now {densityijatnodei[b,c]} veh/km.")
-        assert qijatnodei[b,c] / densityijatnodei[b,c] == argsflowfunc['lK'][frozenset({b,c})]
-        assert (nextwavefronttopropagate['flowaheadofwavefront'] - nextwavefronttopropagate['flow']) / (nextwavefronttopropagate['densityaheadofwavefront'] - nextwavefronttopropagate['density']) == nextwavefronttopropagate['propagationspeed']  # the propagation-speed of the downstream-propagating wavefront, having just passed through node b, should now equal the free speed on link (b,c)
-        assert nextwavefronttopropagate['propagationspeed'] == argsflowfunc['lK'][frozenset({b,c})]
+        nextwavefronttopropagate['flow'] = qijatnodei[b,c]
+        nextwavefronttopropagate['density'] = densityijatnodei[b,c]
+
+        try:
+#          assert qijatnodei[b,c] / densityijatnodei[b,c] == argsflowfunc['lK'][frozenset({b,c})]
+          assert abs(qijatnodei[b,c] / densityijatnodei[b,c] - argsflowfunc['lK'][frozenset({b,c})]) <= EPS
+        except:
+          print(f"qijatnodei[{b},{c}] is {qijatnodei[b,c]}, densityijatnodei[{b},{c}] is {densityijatnodei[b,c]}, argsflowfunc['lK'][frozenset({{{b},{c}}})] is {argsflowfunc['lK'][frozenset({b,c})]}")
+          print(f"qijatnodei[{b},{c}] / densityijatnodei[{b},{c}] - argsflowfunc['lK'][frozenset({{{b},{c}}})] is {qijatnodei[b,c] / densityijatnodei[b,c] - argsflowfunc['lK'][frozenset({b,c})]}")
+          raise
+#        try:
+#          assert abs(nextwavefronttopropagate['densityaheadofwavefront'] - nextwavefronttopropagate['density']) > EPS  # the densities ahead of and behind the downstream-propagating wavefront on link (b,c), having just passed through node b, should not be equal; if they are, and the flows ahead of and behind are also equal (which I expect they will always be as a consequence), then nextwavefronttopropagate has no effect and can be removed
+#        except:
+#          print(f"nextwavefronttopropagate['densityaheadofwavefront'] is {nextwavefronttopropagate['densityaheadofwavefront']}, nextwavefronttopropagate['density']) is {nextwavefronttopropagate['density']}")
+#          print(f"nextwavefronttopropagate['flowaheadofwavefront'] is {nextwavefronttopropagate['flowaheadofwavefront']}, nextwavefronttopropagate['flow']) is {nextwavefronttopropagate['flow']}")
+#          assert abs(nextwavefronttopropagate['flowaheadofwavefront'] - nextwavefronttopropagate['flow']) <= EPS  # TODO: I expect this to be true, i.e. that when, having just passed through node b, the densities ahead of and behind the downstream-propagating wavefront on link (b,c) are equal, the flows ahead of and behind it are also equal
+#          print(f"The densities ahead of behind the downstream-propagating wavefront nextwavefronttopropagate are equal, as are the flows, so wavefront {nextwavefronttopropagate} is removed from propagatingwavefronts.")
+#          propagatingwavefronts.remove( nextwavefronttopropagate )
+#          print(f"propagatingwavefronts is now {propagatingwavefronts}")
+#          raise
+        if abs(nextwavefronttopropagate['densityaheadofwavefront'] - nextwavefronttopropagate['density']) <= EPS:  # the densities ahead of and behind the downstream-propagating wavefront on link (b,c), having just passed through node b, should not be equal; if they are, and the flows ahead of and behind are also equal (which I expect they will always be as a consequence), then nextwavefronttopropagate has no effect and can be removed
+          print(f"nextwavefronttopropagate['densityaheadofwavefront'] is {nextwavefronttopropagate['densityaheadofwavefront']}, nextwavefronttopropagate['density']) is {nextwavefronttopropagate['density']}")
+          print(f"nextwavefronttopropagate['flowaheadofwavefront'] is {nextwavefronttopropagate['flowaheadofwavefront']}, nextwavefronttopropagate['flow']) is {nextwavefronttopropagate['flow']}")
+          assert abs(nextwavefronttopropagate['flowaheadofwavefront'] - nextwavefronttopropagate['flow']) <= EPS  # TODO: I expect this to be true, i.e. that when, having just passed through node b, the densities ahead of and behind the downstream-propagating wavefront on link (b,c) are equal, the flows ahead of and behind it are also equal
+          print(f"The densities ahead of behind the downstream-propagating wavefront nextwavefronttopropagate are equal, as are the flows, so wavefront {nextwavefronttopropagate} has no effect and is removed from propagatingwavefronts.")
+          propagatingwavefronts.remove( nextwavefronttopropagate )
+          print(f"propagatingwavefronts is now {propagatingwavefronts}")
+        else:
+          try:
+#            assert (nextwavefronttopropagate['flowaheadofwavefront'] - nextwavefronttopropagate['flow']) / (nextwavefronttopropagate['densityaheadofwavefront'] - nextwavefronttopropagate['density']) == nextwavefronttopropagate['propagationspeed']  # the propagation-speed of the downstream-propagating wavefront, having just passed through node b, should now equal the free speed on link (b,c)
+            assert abs( (nextwavefronttopropagate['flowaheadofwavefront'] - nextwavefronttopropagate['flow']) / (nextwavefronttopropagate['densityaheadofwavefront'] - nextwavefronttopropagate['density']) - nextwavefronttopropagate['propagationspeed'] ) <= EPS  # the propagation-speed of the downstream-propagating wavefront, having just passed through node b, should now equal the free speed on link (b,c)
+          except:
+            print(f"(nextwavefronttopropagate['flowaheadofwavefront'] - nextwavefronttopropagate['flow']) / (nextwavefronttopropagate['densityaheadofwavefront'] - nextwavefronttopropagate['density']) - nextwavefronttopropagate['propagationspeed'] is {(nextwavefronttopropagate['flowaheadofwavefront'] - nextwavefronttopropagate['flow']) / (nextwavefronttopropagate['densityaheadofwavefront'] - nextwavefronttopropagate['density']) - nextwavefronttopropagate['propagationspeed']}")
+            raise
+          assert nextwavefronttopropagate['propagationspeed'] == argsflowfunc['lK'][frozenset({b,c})]
 
       else:  # either nextwavefronttopropagate is upstream-propagating, or there are no more untraversed links remaining on this shortest path (i.e. numnodesremainingtobetraversedonpath <= 0)
         if nextwavefronttopropagate['nodesonpathtoanexit'][:32] == 'upstream-propagating shock-front':  # the wavefront is upstream-propagating; does not necessarily exit the network at its next node
@@ -1951,6 +2087,7 @@ def evolutionofwaveandshockfronts( inflowsandflowperiodsByNodeID, simulDuration,
               timeThatShockFrontReachedNodea = simulationclocktime + nexttimestepduration
 #              propagateSEM4congestionUpstreamToParents( nextwavefronttopropagate, b, p, flowpb, parentsOnShortestPathsFromInjectionNodes, qijatnodej, densityijatnodej, speedijatnodej, argsflowfunc, injectionnodes, b0, indexamonginjectionorexitnodes )
               congestionAlertMessage = propagateSEM4congestionUpstreamToParents( nextwavefronttopropagate, b, timeThatShockFrontReachedNodea, parentsOnShortestPathsFromInjectionNodes, qijatnodei, densityijatnodei, qijatnodej, densityijatnodej, speedijatnodej, flowstateijatnodej, argsflowfunc, injectionnodes, b0, indexamonginjectionorexitnodes, propagatingwavefronts, nexttimestepduration )
+              congestionAlertMessages.append( congestionAlertMessage )
 
         else:  # the wavefront is downstream-propagating, and exits the network at its next node
           assert b in exitnodes
@@ -1978,7 +2115,8 @@ def evolutionofwaveandshockfronts( inflowsandflowperiodsByNodeID, simulDuration,
       wavefrontIntersected['timetilldestinationnodeonlink'] -= nexttimestepduration
       wavefrontIntersected['distancereacheddownlink'] += wavefrontIntersected['propagationspeed'] * nexttimestepduration
       print(f"nextwavefronttopropagate['distancereacheddownlink'] is {nextwavefronttopropagate['distancereacheddownlink']} km, wavefrontIntersected['distancereacheddownlink'] is {wavefrontIntersected['distancereacheddownlink']} km")
-      assert nextwavefronttopropagate['distancereacheddownlink'] == wavefrontIntersected['distancereacheddownlink']
+#      assert nextwavefronttopropagate['distancereacheddownlink'] == wavefrontIntersected['distancereacheddownlink']
+      assert abs(nextwavefronttopropagate['distancereacheddownlink'] - wavefrontIntersected['distancereacheddownlink']) <= EPS
 #      print(f"nextwavefronttopropagate['timetilldestinationnodeonlink'] is {nextwavefronttopropagate['timetilldestinationnodeonlink']}, wavefrontIntersected['timetilldestinationnodeonlink'] is {wavefrontIntersected['timetilldestinationnodeonlink']}")
 #      print(f"lengthofcurrentlink is {lengthofcurrentlink} km")
       upstreamflow = wavefrontIntersected['flowaheadofwavefront']
@@ -2008,12 +2146,22 @@ def evolutionofwaveandshockfronts( inflowsandflowperiodsByNodeID, simulDuration,
 
       print(f"As it's caught up from behind by upstream-propagating shock-front with propagation-speed {nextwavefronttopropagate['propagationspeed']}, wavefront {wavefrontIntersected} is removed from propagatingwavefronts.")
       propagatingwavefronts.remove( wavefrontIntersected )  # TODO: if nextwavefronttopropagate is trailing (has behind it, downstream) higher flow than does wavefrontIntersected, then remove nextwavefronttopropagate instead
-      print(f"propagatingwavefronts is {propagatingwavefronts}")
+      print(f"propagatingwavefronts is now {propagatingwavefronts}")
 
     elif pointReachedByNextPropagatingWaveFront == 'intersect with wavefront propagating in opposite direction (downstream) on same link':
       assert nextwavefronttopropagate['flow'] < wavefrontIntersected['flow']  # TODO: perhaps not generally true, but I expect it is: the upstream-propagating shockwave should be trailing (have behind it, downstream) a flow that's lower (because congested) than the flow upstream of the downstream-propagating wavefront it's about to intersect
-      assert nextwavefronttopropagate['flowaheadofwavefront'] == wavefrontIntersected['flowaheadofwavefront']  # TODO: this line and the next one are perhaps not generally true, but I expect they are: before the intersection, there should be no other wavefront between nextwavefronttopropagate and wavefrontIntersected
-      assert nextwavefronttopropagate['densityaheadofwavefront'] == wavefrontIntersected['densityaheadofwavefront']
+
+      try:  # commented out for now (3rd May 2021), but this assertion fails at time-step 109, scenario cmr_1s1d1r, inflowsByNodeID = {3: 1000, 4:1500, 5:300, 6:700}
+        assert nextwavefronttopropagate['flowaheadofwavefront'] == wavefrontIntersected['flowaheadofwavefront']  # FIXME: this assertion and the next one below are perhaps not generally true, but I expect they are: before the intersection, there should be no other wavefront between nextwavefronttopropagate and wavefrontIntersected
+      except:
+        print(f"nextwavefronttopropagate['flowaheadofwavefront'] is {nextwavefronttopropagate['flowaheadofwavefront']}, wavefrontIntersected['flowaheadofwavefront'] is {wavefrontIntersected['flowaheadofwavefront']}")
+        raise
+      try:  # commented out for now (3rd May 2021), but this assertion fails at time-step 109, scenario cmr_1s1d1r, inflowsByNodeID = {3: 1000, 4:1500, 5:300, 6:700}
+        assert nextwavefronttopropagate['densityaheadofwavefront'] == wavefrontIntersected['densityaheadofwavefront']
+      except:
+        print(f"nextwavefronttopropagate['densityaheadofwavefront'] is {nextwavefronttopropagate['densityaheadofwavefront']}, wavefrontIntersected['densityaheadofwavefront'] is {wavefrontIntersected['densityaheadofwavefront']}")
+        raise
+
 #      nextwavefronttopropagate['timetilldestinationnodeonlink'] -= nexttimestepduration
       nextwavefronttopropagate['distancereacheddownlink'] += nextwavefronttopropagate['propagationspeed'] * nexttimestepduration
       wavefrontIntersected['timetilldestinationnodeonlink'] -= nexttimestepduration
@@ -2047,7 +2195,7 @@ def evolutionofwaveandshockfronts( inflowsandflowperiodsByNodeID, simulDuration,
         raise
       print(f"As it's intersected by upstream-propagating shock-front with propagation-speed {nextwavefronttopropagate['propagationspeed']}, downstream-propagating wavefront {wavefrontIntersected} is removed from propagatingwavefronts.")
       propagatingwavefronts.remove( wavefrontIntersected )  # TODO: if nextwavefronttopropagate is trailing (has behind it, downstream) higher flow than does wavefrontIntersected, then remove nextwavefronttopropagate instead
-      print(f"propagatingwavefronts is {propagatingwavefronts}")
+      print(f"propagatingwavefronts is now {propagatingwavefronts}")
 
     elif pointReachedByNextPropagatingWaveFront[:60] == 'travel until the simulation clock-time reaches simulDuration':
       nextwavefronttopropagate['timetilldestinationnodeonlink'] -= nexttimestepduration
@@ -2061,8 +2209,23 @@ def evolutionofwaveandshockfronts( inflowsandflowperiodsByNodeID, simulDuration,
 ##    print(f"After updating downstream-propagating wavefront, propagatingwavefronts is {propagatingwavefronts}")
 #    print(f"After updating downstream-propagating wavefront, len(propagatingwavefronts) is {len(propagatingwavefronts)}")
 
+    for (i,j) in qijatnodej:
+      try:
+        assert qijatnodei[i,j] <= totalinflows
+      except:
+        print(f"qijatnodei[{i},{j}] is {qijatnodei[i,j]}")
+        raise
+      try:
+        assert qijatnodej[i,j] <= totalinflows
+      except:
+        print(f"qijatnodej[{i},{j}] is {qijatnodej[i,j]}")
+        raise
+
     if nextwavefronttopropagate['nodesonpathtoanexit'][:32] != 'upstream-propagating shock-front':
-      assert nextwavefronttopropagate['flow'] == nextwavefronttopropagate['density'] * nextwavefronttopropagate['propagationspeed']
+      print(f"nextwavefronttopropagate['flow'] is {nextwavefronttopropagate['flow']}, nextwavefronttopropagate['density'] is {nextwavefronttopropagate['density']}, nextwavefronttopropagate['propagationspeed'] is {nextwavefronttopropagate['propagationspeed']}.")
+      print(f"nextwavefronttopropagate['flow'] is {nextwavefronttopropagate['flow']}, nextwavefronttopropagate['density']*nextwavefronttopropagate['propagationspeed'] is {nextwavefronttopropagate['density']*nextwavefronttopropagate['propagationspeed']}.")
+#      assert nextwavefronttopropagate['flow'] == nextwavefronttopropagate['density'] * nextwavefronttopropagate['propagationspeed']
+      assert abs(nextwavefronttopropagate['flow'] - nextwavefronttopropagate['density'] * nextwavefronttopropagate['propagationspeed']) <= EPS
 #    else:
 #      assert nextwavefronttopropagate['flow'] == nextwavefronttopropagate['density'] * nextwavefronttopropagate['propagationspeed']  # TODO: maybe replace this with an assertion that is correct for the case of an upstream-propagating wavefront
     print(f"After updating propagating wavefront, len(propagatingwavefronts) is {len(propagatingwavefronts)}")
@@ -2083,9 +2246,10 @@ def evolutionofwaveandshockfronts( inflowsandflowperiodsByNodeID, simulDuration,
         direction = 'downstream'
       print(f"Updated {direction}-propagating otherwavefront is {wavefront}")
   
+    verifyOnEveryLinkThatPropagatingFlowMatchesqijValues(propagatingwavefronts, argsflowfunc, qijatnodei, qijatnodej)
     simulationclocktime += nexttimestepduration
-    print(f"==============simulationclocktime is {simulationclocktime} hours ({simulationclocktime*3600} seconds).")
-    print(f"cumulNumVehiclesToHaveDepartedLinkDuringSimulation is {cumulNumVehiclesToHaveDepartedLinkDuringSimulation}")
+    timestepcount += 1
+    printSimulationClockTime(timestepcount, simulationclocktime)
 #    sys.exit()
 
   if simulationclocktime < simulDuration:  # run final time-step, ending at the specified duration of the simulation
@@ -2099,9 +2263,10 @@ def evolutionofwaveandshockfronts( inflowsandflowperiodsByNodeID, simulDuration,
       cumulNumVehiclesToHaveDepartedLinkDuringSimulation[i, j] += numVehiclesDepartingLinkDuringThisTimestep
       print(f"cumulNumVehiclesToHaveDepartedLinkDuringSimulation[{i}, {j}] is now {cumulNumVehiclesToHaveDepartedLinkDuringSimulation[i, j]}")
     simulationclocktime += finaltimestepduration
-    print(f"==============simulationclocktime is {simulationclocktime} hours ({simulationclocktime*3600} seconds).")
+    timestepcount += 1
+    printSimulationClockTime(timestepcount, simulationclocktime)
 
-  return (cumulNumVehiclesToHaveDepartedLinkDuringSimulation, outflowsByNodeID, congestionAlertMessage)
+  return (cumulNumVehiclesToHaveDepartedLinkDuringSimulation, outflowsByNodeID, congestionAlertMessages)
 
 
 #def runSEM2or3or4( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperiodsByNodeID, exitnodes, simulDuration=14/3600):
@@ -2403,8 +2568,8 @@ def runSEM2or3or4( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandf
         flow = flowEnteringNode( i, childnode, parentsOnShortestPathsFromInjectionNodes, qijatnodej, densityijatnodej, speedijatnodej, argsflowfunc, exitnodes, b0, indexamonginjectionorexitnodes, shortestPathToAnExit, flowijfunc, flowfunc, injectionnodes )  # get rid of injection-speed 'v0' and replace it with the link's free speed
         outflowsByNodeID[i] = -flow
     elif SEMversion == 'SEM4':
-      (cumulNumVehiclesToHaveDepartedLinkDuringSimulation, outflowsByNodeID, congestionAlertMessage) = evolutionofwaveandshockfronts( inflowsandflowperiodsByNodeID, simulDuration, parentsOnShortestPathsFromInjectionNodes, qijatnodei, densityijatnodei, qijatnodej, densityijatnodej, speedijatnodej, flowstateijatnodej, argsflowfunc, exitnodes, b0, indexamonginjectionorexitnodes, shortestPathToAnExit, flowijfunc, flowfunc, injectionnodes, outflowsByNodeID )
-      print(f"congestionAlertMessage is '{congestionAlertMessage}'")
+      (cumulNumVehiclesToHaveDepartedLinkDuringSimulation, outflowsByNodeID, congestionAlertMessages) = evolutionofwaveandshockfronts( inflowsandflowperiodsByNodeID, simulDuration, parentsOnShortestPathsFromInjectionNodes, qijatnodei, densityijatnodei, qijatnodej, densityijatnodej, speedijatnodej, flowstateijatnodej, argsflowfunc, exitnodes, b0, indexamonginjectionorexitnodes, shortestPathToAnExit, flowijfunc, flowfunc, injectionnodes, outflowsByNodeID )
+      print(f"congestionAlertMessages is '{congestionAlertMessages}'")
       timeaveragedflowsinlinksoverSimulDuration = {key: cumulNumVehiclesToHaveDepartedLinkDuringSimulation[key] / simulDuration for key in cumulNumVehiclesToHaveDepartedLinkDuringSimulation}
 
     if SEMversion in ('SEM3', 'SEM4'):
@@ -2423,14 +2588,12 @@ def runSEM2or3or4( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandf
     endtime = time.time()
     timetorunshortestpathbasedmethod = endtime - starttime
     print(f"Shortest-path-based method took {timetorunshortestpathbasedmethod:.5f} seconds.")
-    print("densityijatnodej is", densityijatnodej)
-    print("speedijatnodej is", speedijatnodej)
+#    print("densityijatnodej is", densityijatnodej)
+#    print("speedijatnodej is", speedijatnodej)
     starttime = time.time()
-    print("Calculating congestion in edges...")
-#    print(f"qijatnodej.keys() is {qijatnodej.keys()}")
-    print(f"densityijatnodej.keys() is {densityijatnodej.keys()}")
-##    for edge in qijatnodej.keys():
-#    for edge in densityijatnodej.keys():
+#    print("Calculating congestion in edges...")
+##    print(f"qijatnodej.keys() is {qijatnodej.keys()}")
+#    print(f"densityijatnodej.keys() is {densityijatnodej.keys()}")
     for edge in lK.keys():
 ##      humpdensity = argsflowfunc['tau'][frozenset({p,i})]
 ##      if densityinlink > humpdensity:
@@ -2446,8 +2609,8 @@ def runSEM2or3or4( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandf
         congestionij[frozenset({r, s})] = 'linkNotUsedInAShortestPath'
         print(f"Congestion on link ({r}, {s}) is 'linkNotUsedInAShortestPath'.")
         continue
-      print(f"flowinedge qijatnodej[{r}, {s}] is {flowinedge}")
-      print(f"densityijatnodej[{edge}] is {densityijatnodej[edge]}")
+#      print(f"flowinedge qijatnodej[{r}, {s}] is {flowinedge}")
+#      print(f"densityijatnodej[{edge}] is {densityijatnodej[edge]}")
       if densityijatnodej[edge] == 'linkNotUsedInAShortestPathOrLeavingEndNotReachedDuringSimul':  # qijatnodej has a value for the edge, so it must be used in a shortest path, which implies the arc's leaving-end (finish-node) wasn't reached during the duration of the simulation
         assert flowinedge == 0.0
         congestiononlink = 'leavingEndOfLinkNotReachedDuringSimul'
@@ -2458,12 +2621,12 @@ def runSEM2or3or4( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandf
       congestionij[frozenset({r, s})] = congestiononlink
       assert congestiononlink == 'leavingEndOfLinkNotReachedDuringSimul' or congestiononlink >= 0.0
       linkcapacity = argsflowfunc['linkcapacity'][edge]
-      if congestiononlink != 'leavingEndOfLinkNotReachedDuringSimul' and abs(congestiononlink) > 0.0:  # TODO: is the abs() necessary?
-        print(f"CONGESTION of {linkcapacity:.3f}-{flowinedge:.3f}={congestiononlink:.3f} occurs on link ({r}, {s}) which has capacity of {linkcapacity:.3f}.")  # TODO: this measure of congestion gives a negative value when the flow entering the parent is greater than the link-capacity: might need a better measure
-      elif congestiononlink == 'leavingEndOfLinkNotReachedDuringSimul':
-        print(f"congestion on link ({r}, {s}), which has capacity of {linkcapacity:.3f}, is {congestiononlink}.")
-      else:
-        print(f"There is NO congestion on link ({r}, {s}) which has capacity of {linkcapacity:.3f}.")
+#      if congestiononlink != 'leavingEndOfLinkNotReachedDuringSimul' and abs(congestiononlink) > 0.0:  # TODO: is the abs() necessary?
+#        print(f"CONGESTION of {linkcapacity:.3f}-{flowinedge:.3f}={congestiononlink:.3f} occurs on link ({r}, {s}) which has capacity of {linkcapacity:.3f}.")  # TODO: this measure of congestion gives a negative value when the flow entering the parent is greater than the link-capacity: might need a better measure
+#      elif congestiononlink == 'leavingEndOfLinkNotReachedDuringSimul':
+#        print(f"congestion on link ({r}, {s}), which has capacity of {linkcapacity:.3f}, is {congestiononlink}.")
+#      else:
+#        print(f"There is NO congestion on link ({r}, {s}) which has capacity of {linkcapacity:.3f}.")
     endtime = time.time()
     timetocalculatecongestion = endtime - starttime
     print(f"Calculation of congestion took {timetocalculatecongestion:.5f} seconds.")
@@ -2485,7 +2648,7 @@ def runSEM2or3or4( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandf
   print(f"BBwest {BBwest}, BBsouth {BBsouth}, BBeast {BBeast}, BBnorth {BBnorth}")
   outputGeoJSON["bbox"] = [BBwest, BBsouth, BBeast, BBnorth]
   outputGeoJSON["features"] = []
-  print("inflowsByNodeID is", inflowsByNodeID)
+#  print("inflowsByNodeID is", inflowsByNodeID)
   for nodeID in sorted( pointcoordsbyID.keys() ):
     pointJSON = {}
     pointJSON["geometry"] = {}
@@ -2546,7 +2709,7 @@ def runSEM2or3or4( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandf
 
   outputGeoJSON["type"] = "FeatureCollection"
 
-  print("outputGeoJSON is", outputGeoJSON)
+#  print("outputGeoJSON is", outputGeoJSON)
 
 
 
@@ -2556,20 +2719,21 @@ def runSEM2or3or4( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandf
 #  networktype = 'star'
   networktype = 'nontree'
   print("networktype is", networktype)
-  print("pointcoordsbyID is", pointcoordsbyID)
+#  print("pointcoordsbyID is", pointcoordsbyID)
   if exception == None:
-    print()
-    print("qij is %s" % qij)
-    print("congestionij is %s" % congestionij)
+#    print()
+#    print("qij is %s" % qij)
+#    print("congestionij is %s" % congestionij)
     if SEMversion in ('SEM3', 'SEM4'):  # found shortest-path routes, rather than using the global optimiser
-      print("densityijatnodej is %s" % densityijatnodej)
-      print("speedijatnodej is %s" % speedijatnodej)
+#      print("densityijatnodej is %s" % densityijatnodej)
+#      print("speedijatnodej is %s" % speedijatnodej)
+      pass
     G = nx.DiGraph()  #G = nx.Graph()
 #    DECIMALPLACES = 4  # number of decimal places to show in values on the graph
 #    DECIMALPLACES = 3  # number of decimal places to show in values on the graph
-    DECIMALPLACES = 2  # number of decimal places to show in values on the graph
+#    DECIMALPLACES = 2  # number of decimal places to show in values on the graph
 #    DECIMALPLACES = 1  # number of decimal places to show in values on the graph
-#    DECIMALPLACES = 0  # number of decimal places to show in values on the graph
+    DECIMALPLACES = 0  # number of decimal places to show in values on the graph
 
 #    G.add_nodes_from(range(4))
 ##    G.add_edges_from( [e for e in G.edges()] )
@@ -2581,12 +2745,12 @@ def runSEM2or3or4( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandf
 #      print("(i,j) (%d, %d)" % (i, j))
 #      print("qij %f" % qij[i,j])
       flowrounded = round(qij[i,j], DECIMALPLACES)
-      print(f"congestionij[frozenset(set(({i},{j})))] is {congestionij[frozenset(set((i,j)))]}")
+#      print(f"congestionij[frozenset(set(({i},{j})))] is {congestionij[frozenset(set((i,j)))]}")
       if congestionij[frozenset(set((i,j)))] == 'leavingEndOfLinkNotReachedDuringSimul':
         congestionrounded = "endNotReachedInSimul"
       else:
         congestionrounded = round(congestionij[frozenset(set((i,j)))], DECIMALPLACES)
-      print(f"flowrounded is {flowrounded} veh/hr, congestionrounded is {congestionrounded} veh/hr")
+#      print(f"flowrounded is {flowrounded} veh/hr, congestionrounded is {congestionrounded} veh/hr")
       if SEMversion == 'SEM2':  # used the solver, rather than finding shortest-path routes
 #        hi = hInjectionNodes[indexamonginjectionorexitnodes[i]]
 #        hj = hInjectionNodes[indexamonginjectionorexitnodes[j]]
@@ -2598,27 +2762,27 @@ def runSEM2or3or4( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandf
           hj = terminatorPressure
         else:
           hj = hInjectionNodes[indexamonginjectionorexitnodes[j]]
-#        print("hi %f, hj %f" % (hi, hj))
+##        print("hi %f, hj %f" % (hi, hj))
         densityonlink = abs(hi - hj)
       else:
         densityonlink = densityijatnodej[frozenset({i, j})]
-      print("densityonlink is %s" % densityonlink)
+#      print("densityonlink is %s" % densityonlink)
       if densityonlink == 'leavingEndOfLinkNotReachedDuringSimul':
         densityrounded = "endNotReachedInSimul"
       else:
         densityrounded = round(densityonlink, DECIMALPLACES)
-      print(f"densityrounded is {densityrounded}")
+#      print(f"densityrounded is {densityrounded}")
       if SEMversion == 'SEM2':  # used the solver, rather than finding shortest-path routes
         speedonlink = qij[i,j] / densityonlink
 #      else:
       elif SEMversion in ('SEM3', 'SEM4'):
         speedonlink = speedijatnodej[frozenset({i, j})]
-      print("speedonlink is %s" % speedonlink)
+#      print("speedonlink is %s" % speedonlink)
       if speedonlink == 'leavingEndOfLinkNotReachedDuringSimul':
         speedrounded = "endNotReachedInSimul"
       else:
         speedrounded = round(speedonlink, DECIMALPLACES)
-      print("speedrounded is %s" % speedrounded)
+#      print("speedrounded is %s" % speedrounded)
       if qij[i,j] >= 0.0:
         positiveflowedges.append( (i,j) )
         flowvaluetodisplay = flowrounded
@@ -2629,13 +2793,16 @@ def runSEM2or3or4( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandf
 #        elabels[i,j] = "q %.*f, \u03b2 %.*f, v %.*f" % (DECIMALPLACES, -flowrounded, DECIMALPLACES, congestionrounded, DECIMALPLACES, -speedrounded)  # display q, \beta_{ij} (congestion), and speed on each edge {i,j}
       if densityrounded == 'endNotReachedInSimul':
         assert densityrounded == speedrounded == congestionrounded == 'endNotReachedInSimul'
-#        elabels[i,j] = "q %.*f, \u03c1 %s, v %s, \u03b2 %s" % (DECIMALPLACES, flowvaluetodisplay, densityrounded, speedrounded, congestionrounded)  # display q, rho (density), speed, and beta (congestion) on each edge
-        elabels[i,j] = "q %.*f, \u03c1=v=\u03b2=%s" % (DECIMALPLACES, flowvaluetodisplay, densityrounded)  # display q, rho (density), speed, and beta (congestion) on each edge
+##        elabels[i,j] = "q %.*f, \u03c1 %s, v %s, \u03b2 %s" % (DECIMALPLACES, flowvaluetodisplay, densityrounded, speedrounded, congestionrounded)  # display q, rho (density), speed, and beta (congestion) on each edge
+#        elabels[i,j] = "q %.*f, \u03c1=v=\u03b2=%s" % (DECIMALPLACES, flowvaluetodisplay, densityrounded)  # display q, rho (density), speed, and beta (congestion) on each edge
+        elabels[i,j] = "q %.*f, \u03c1=v=%s" % (DECIMALPLACES, flowvaluetodisplay, densityrounded)  # display q, rho (density), and speed on each edge
       else:
         if abs(densityrounded) < 1e4:
-          elabels[i,j] = "q %.*f, \u03c1 %.*f, v %.*f, \u03b2 %.*f" % (DECIMALPLACES, flowvaluetodisplay, DECIMALPLACES, densityrounded, DECIMALPLACES, speedrounded, DECIMALPLACES, congestionrounded)  # display q, rho (density), speed, and beta (congestion) on each edge
+#          elabels[i,j] = "q %.*f, \u03c1 %.*f, v %.*f, \u03b2 %.*f" % (DECIMALPLACES, flowvaluetodisplay, DECIMALPLACES, densityrounded, DECIMALPLACES, speedrounded, DECIMALPLACES, congestionrounded)  # display q, rho (density), speed, and beta (congestion) on each edge
+          elabels[i,j] = "q %.*f, \u03c1 %.*f, v %.*f" % (DECIMALPLACES, flowvaluetodisplay, DECIMALPLACES, densityrounded, DECIMALPLACES, speedrounded)  # display q, rho (density), speed, and beta (congestion) on each edge
         else:
-          elabels[i,j] = "q %.*f, \u03c1 %.1e, v %.*f, \u03b2 %.*f" % (DECIMALPLACES, flowvaluetodisplay, densityrounded, DECIMALPLACES, speedrounded, DECIMALPLACES, congestionrounded)  # display q, rho (density), speed, and beta (congestion) on each edge
+#          elabels[i,j] = "q %.*f, \u03c1 %.1e, v %.*f, \u03b2 %.*f" % (DECIMALPLACES, flowvaluetodisplay, densityrounded, DECIMALPLACES, speedrounded, DECIMALPLACES, congestionrounded)  # display q, rho (density), speed, and beta (congestion) on each edge
+          elabels[i,j] = "q %.*f, \u03c1 %.1e, v %.*f" % (DECIMALPLACES, flowvaluetodisplay, densityrounded, DECIMALPLACES, speedrounded)  # display q, rho (density), speed, and beta (congestion) on each edge
     G.add_edges_from( positiveflowedges )
     debug("G.nodes() is %s" % G.nodes())
     debug("G.edges() is %s" % G.edges())
@@ -2693,12 +2860,11 @@ def runSEM2or3or4( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandf
       pos = nx.spring_layout(G)  # set 'seed' for deterministic node-layout
     elif networktype == 'nontree':
       pos = nx.spring_layout(G)  # set 'seed' for deterministic node-layout
-#    print("pos is %s" % pos)
     assert len(pos) == len(pointcoordsbyID)
     assert set(pos.keys()) == set(pointcoordsbyID.keys())
     for nodeID in pointcoordsbyID:  # set the nodes' positions
       pos[nodeID] = np.array( pointcoordsbyID[nodeID] )
-    print("pos is %s" % pos)
+#    print("pos is %s" % pos)
 ###    plt.figure(1, figsize=(9,5))
 ##    plt.figure(figsize=(9,5))
 #    fig, ax = plt.subplots(figsize=(11,5))
@@ -2734,7 +2900,7 @@ def runSEM2or3or4( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandf
     BBeast = max([pos[i][0] for i in range(N)])
     BBnorth = max([pos[i][1] for i in range(N)])
     BBsouth = min([pos[i][1] for i in range(N)])
-    print(f"BBwest {BBwest}, BBeast {BBeast}, BBnorth {BBnorth}, BBsouth {BBsouth}")
+#    print(f"BBwest {BBwest}, BBeast {BBeast}, BBnorth {BBnorth}, BBsouth {BBsouth}")
 #    print("BBeast-BBwest is", BBeast-BBwest)
     pos_hvalues = {}
 #    for i in range(N):
@@ -2755,8 +2921,8 @@ def runSEM2or3or4( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandf
 #        y = .5
         y = BBsouth - .003
       pos_hvalues[v] = np.array([x, y])
-#      print("np.array([x, y] is", np.array([x, y]))
-    print("pos_hvalues is %s" % pos_hvalues)
+##      print("np.array([x, y] is", np.array([x, y]))
+#    print("pos_hvalues is %s" % pos_hvalues)
     if SEMversion == 'SEM2':  # used the solver, rather than finding shortest-path routes
       nx.draw_networkx_labels(G, pos_hvalues, hvaluelabels, font_color='k')
 
@@ -2795,7 +2961,8 @@ def runSEM2or3or4( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandf
         if BBnorth-BBsouth > 0:
           y = (pos[i][1]-BBsouth)/(BBnorth-BBsouth)*(.8-.2)+.24
         else:
-          y = .5
+#          y = .5
+          y = .55
 #        print("%d: x %.5f, y %.5f, inflowlabels[i] %.4f" % (i, x, y, inflowlabels[i]))
         fig.text(x, y, str(inflowlabels[i]), bbox=dict(facecolor='red', alpha=.5))
 ##    fig.text(.3, .8, 'Testing', size=10, transform=ax.transAxes)
