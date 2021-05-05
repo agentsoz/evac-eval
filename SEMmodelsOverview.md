@@ -33,6 +33,7 @@
 * If a free-flow wavefront reaches a link with insufficient capacity to carry its entire flow, then congested flow propagates upstream as a ''shockwave'' (upsteram-propagating wavefront). 
 ![title](congestionPropagatesUpstream.png)
 * A shockwave can catch up with a slower-propagating shockwave, or meet a downstream-propagating wavefront, on the same link.
+* Each time-step is defined as the time it will take for the next wavefront to reach the end of its link or intersect with another wavefront on that link.
 * For the static solution at time infinity, all shockwaves are assumed to have propagated upstream to the root-nodes of the shortest-path tree.
 
 ### SEM4 - traffic-flow along road-links, with flow dependent on density
