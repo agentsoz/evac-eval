@@ -31,6 +31,7 @@
 * Traffic-flow is divided into distinct ''zones'', each with its own values for flow, density, and speed; the zones' boundaries are wavefronts that propagate with time. A link can contain several zones, or just one.
 * Free flow propagates downstream as a wavefront, with propagation-speed equal to the free speed of its current link.
 * If a free-flow wavefront reaches a link with insufficient capacity to carry its entire flow, then congested flow propagates upstream as a ''shockwave'' (upsteram-propagating wavefront). 
+![title](congestionPropagatesUpstream.png)
 * A shockwave can catch up with a slower-propagating shockwave, or meet a downstream-propagating wavefront, on the same link.
 * For the static solution at time infinity, all shockwaves are assumed to have propagated upstream to the root-nodes of the shortest-path tree.
 
