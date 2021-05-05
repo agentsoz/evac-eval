@@ -24,7 +24,7 @@
 ![title](threenodefalsenegative-triangularflowfn-1000.png)
 
 ### SEM3 - traffic-flow along road-links, with flow dependent on density
-* Theory taken from Chapter 8 of Treiber & Ketting, #Traffic Flow Dynamics# (2013).
+* Theory taken from Chapter 8 of Treiber & Ketting, *Traffic Flow Dynamics* (2013).
 * Use piece-wise linear ''triangular'' flow-function: has two pieces, corresponding to free and congested flow, respectively (and is non-monotonic in density).
 * The triangular flow-function 
 * Traffic entering at any injection-node takes its shortest-path route to the nearest exit-node.
