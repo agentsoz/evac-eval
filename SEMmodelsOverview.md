@@ -67,11 +67,11 @@ has the unique solution shown (flow-capacities in square brackets). But with one
 * Maximum-flow method doesn't consider individual subflows between origin/destination pairs, so congestion along subflow-paths is possible even when the maximum flow equals total of assigned subflows; consider the network below (flow-capacities in square brackets), with assigned subflows of 
   - 800 from node 0 to node 2
   - 200 from node 0 to node 3.
-The maximum flow found (1000) equals the total of assigned subflows, but is achieved only by using arc (2,3) which the subflows don't use.
-![Diagram: four-node network on which maximum-flow method fails to find congestion along assigned subflows](fournode-maxFlowMethodFailsToFindCongestionOnAssignedSubflow-800-200.png)
-When arc (2,3) can't be used, the assigned subflows lead to congestion on arc (0,1).
+When the subflows use only links on shortest paths, which exclude arc (2,3), there is congestion on arc (0,1):
 ![Diagram: four-node network with congestion along assigned subflows despite sufficiently-high maximum flow found by maximum-flow method](fournode-congestionOnAssignedSubflowDespiteSufficientMaxFlow-800-200.png)
-* This problem could be alleviated by calculating maximum flow on the network that contains only links carrying assigned subflows.
+Maximum-flow method finds maximum flow (1000) equal to the total of assigned subflows, but is achieved only by using arc (2,3) - a false negative:
+![Diagram: four-node network on which maximum-flow method fails to find congestion along assigned subflows](fournode-maxFlowMethodFailsToFindCongestionOnAssignedSubflow-800-200.png)
+* This problem might be alleviated by calculating maximum flow on the network that contains only links carrying assigned subflows.
 
 
 ## Next steps for development
