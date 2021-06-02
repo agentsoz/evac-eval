@@ -15,12 +15,12 @@
 
 ## Comparison of versions of the model
 
-Model | Why currently fails | Advantages | Drawbacks | Improvements (if any) that could make model work
+Model | Why currently fails | Advantages | Drawbacks | Improvements (if any) needed to make model work
 ------ |------------------- |---------- |--------- |------------------------
 SEM1  | Each link has infinite flow-capacity, so congestion can't arise | Simple to implement; Newton-Raphson method quickly solves model | Doesn't adequately model traffic-flow |
-SEM2  | Traffic can flow out at any exit-node: can't send a subflow to its assigned exit-node. Model has no way to choose between low (free-flow) and high (congested) density in each link, so can't detect congestion | Simple to implement | Doesn't adequately model traffic-flow; global optimiser is slow | Instead of one variable h per node, could try one variable (density) per arc, but assignment to each arc of free or congested flow would still be arbitrary
-SEM3  | Implementation is incomplete | Identifies congested links, sends subflows to their assigned exit-nodes; completes quickly, so far | | Extension to correctly propagate shockfronts through nodes
-SEM4  | Implementation is incomplete | Sends subflows to their assigned exit-nodes; reports time-dependent propagation of wavefronts | Model and implementation are complex | Extension to correctly propagate shockfronts through nodes
+SEM2  | Traffic can flow out at any exit-node: can't send a subflow to its assigned exit-node. Model has no way to choose between low (free-flow) and high (congested) density in each link, so can't detect congestion | Quite simple to implement | Doesn't adequately model traffic-flow; global optimiser is slow, and must be initialised from several different starting-vectors | Instead of one variable h per node, could try one variable (density) per arc, but assignment to each arc of free or congested flow would still be arbitrary
+SEM3  | Implementation is incomplete | Identifies some congested links, sends subflows to their assigned exit-nodes; completes quickly, so far | | Extension to correctly propagate shockfronts through nodes
+SEM4  | Implementation is incomplete | Identifies some congested links, sends subflows to their assigned exit-nodes; reports time-dependent propagation of wavefronts | Model and implementation are complex | Extension to correctly propagate shockfronts through nodes
 SEM5  | If capacities allow, maximum-flow method correctly sends total assigned flow from each injection-node and total assigned flow to each exit-node; but doesn't satisfy individual subflows between origin/destination pairs | Maximum-flow is implemented in libraries, and code is fast | Doesn't consider individual subflows between injection/exit pairs, so misses congestion along subflows | Apply method to the sub-network containing only links used by assigned subflows
 
 ## Versions of the model in more detail
