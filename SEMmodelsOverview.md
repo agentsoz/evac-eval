@@ -80,6 +80,7 @@ Maximum-flow method finds maximum flow (1000) equal to the total of assigned sub
 ## Next steps for development
 * Complete implementation of SEM3/4 to correctly propagate congested flow upstream.
 * Perhaps optimise SEM3/4 to obtain an improved time-complexity, which is currently as high as O(E N^4).
+* Modify SEM5 to find maximum flow through the sub-network containing only links used by assigned subflows.
 
 
 ## Authors of software-implementations
