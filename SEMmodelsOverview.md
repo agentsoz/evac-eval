@@ -1,5 +1,9 @@
 # Overview of static-evacuation models (SEM)
 
+*Aim*: to identify bottlenecks in a road-network and the links that become congested as a consequence of the bottlenecks.
+
+What makes this problem difficult is that flow in an arc, and whether that flow is free or congested, affects and depends on the flows and congestion-states in adjacent arcs, both upstream and downstream.
+
 ## Inputs for a scenario
 * A network of links (edges) and nodes.
 * Each link has a 
@@ -11,7 +15,7 @@
 * A subset of *injection-nodes,* at each of which there is a specified in-flow of traffic from nearby homes.
 * A subset of *exit-nodes* where traffic can flow out of the network.
 * Every node is either an injection-node or an exit-node, and not both.
-* The in-flow at an injection-node is sub-divided into specified subflows, one for each exit-node that has been assigned to that injection-node.
+* The in-flow at an injection-node is sub-divided into specified *subflows*, one for each exit-node that has been assigned to that injection-node.
 
 ## Comparison of versions of the model
 
