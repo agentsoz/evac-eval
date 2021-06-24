@@ -4,17 +4,21 @@
 
 ![Diagram: raster-layer showing how many fire-perimeters each cell lies inside](rasterLayer-numFirePerimetersInside-fourfires.png)
 
+Population archetypes superimposed:
 ![Diagram: with population archetypes superimposed, defined by 'home' activity](populationArchetypesSuperimposed-fourfires.png)
 
+Population as a coarser-grained raster:
 ![Diagram: with population archetypes as coarse-grained raster](populationArchetypesSuperimposed-coarseGrainedRaster-fourfires.png)
 
+
+## Each population raster-cell inside at least one fire is assigned an injection-node - the network node having largest maximum out-capacity
+
+Links coloured by capacity and population-nodes coloured by largest maximum out-capacity:
+![Diagram: network vector-layer with links coloured by capacity and population-nodes coloured by largest maximum out-capacity](linksColouredByCapacity_populationNodesColouredByLargestMaxOutCapacity-fourfires.png)
+
+Each population-node that's inside at least one fire, its raster-cell coloured by the number of fires it sits inside:
 ![Diagram: network vector-layer with each population-node that's inside at least one fire, its raster-cell coloured by the number of fires it sits inside](populationNodesAndRasterOfNumFiresPopulationIsInside-fourfires.png)
 
-
-
-# Each population raster-cell inside at least one fire is assigned an injection-node - the network node having largest maximum out-capacity
-
-![Diagram: network vector-layer with links coloured by capacity and population-node coloured by largest maximum out-capacity](linksColouredByCapacity_populationNodesColouredByLargestMaxOutCapacity-fourfires.png)
 
 
 # Maximum-flow method run on fire ffdi100a
