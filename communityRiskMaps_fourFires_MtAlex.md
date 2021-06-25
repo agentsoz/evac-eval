@@ -1,4 +1,4 @@
-# Community risk per population-node, as posed by four fires (Mount Alexander Shire)
+# Community risk per population node, as posed by four fires (Mount Alexander Shire)
 
 ![Diagram: fires ffdi100{a,b,c,d}, Mount Alexander Shire](fourOverlappingFiresMtAlex.png)
 
@@ -10,18 +10,20 @@
 ### Population as a coarser-grained raster:
 ![Diagram: with population archetypes as coarse-grained raster](populationArchetypesSuperimposed-coarseGrainedRaster-fourfires.png)
 
-
-## Each population raster-cell with non-zero population and inside at least one fire is assigned an injection-node - the network node having largest maximum out-capacity
-
-### Links coloured by capacity and population-nodes coloured by largest maximum out-capacity:
-![Diagram: network vector-layer with links coloured by capacity and population-nodes coloured by largest maximum out-capacity](linksColouredByCapacity_populationNodesColouredByLargestMaxOutCapacity-fourfires.png)
-
-### Each population-node that's inside at least one fire, its raster-cell coloured by the number of fires it sits inside:
-![Diagram: network vector-layer with each population-node that's inside at least one fire, its raster-cell coloured by the number of fires it sits inside](populationNodesAndRasterOfNumFiresPopulationIsInside-fourfires.png)
+### Number of fires each population-cell sits inside (community risk)
+![Diagram: Number of fires each population-cell sits inside (community risk)](numFiresPopulationIsInside-fourfires.png)
 
 
 
 # Maximum-flow method run on fire ffdi100a
+
+## Each population raster-cell with non-zero population and inside the fire is assigned a "population node" (injection-node) - the network node having largest maximum out-capacity
+
+### Links coloured by capacity and population nodes coloured by largest maximum out-capacity:
+![Diagram: network vector-layer with links coloured by capacity and population nodes coloured by largest maximum out-capacity](linksColouredByCapacity_populationNodesColouredByLargestMaxOutCapacity-fourfires.png)
+
+### Each population node that's inside at least one fire, its raster-cell coloured by the number of fires it sits inside:
+![Diagram: network vector-layer with each population node that's inside at least one fire, its raster-cell coloured by the number of fires it sits inside](populationNodesAndRasterOfNumFiresPopulationIsInside-fourfires.png)
 
 ![Diagram: maximum-flow applied to fire ffdi100a, Mount Alexander Shire](maxFlowFireA.png)
 
