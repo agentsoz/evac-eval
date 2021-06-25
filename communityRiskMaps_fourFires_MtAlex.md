@@ -7,7 +7,7 @@
 ### Population archetypes superimposed:
 ![Diagram: with population archetypes superimposed, defined by 'home' activity](populationArchetypesSuperimposed-fourfires.png)
 
-### Population as a coarser-grained raster:
+### As a coarser-grained raster:
 ![Diagram: with population archetypes as coarse-grained raster](populationArchetypesSuperimposed-coarseGrainedRaster-fourfires.png)
 
 ### Number of fires each population-cell sits inside (community risk)
@@ -22,8 +22,8 @@
 ### Links coloured by capacity and population nodes coloured by largest maximum out-capacity:
 ![Diagram: network vector-layer with links coloured by capacity and population nodes coloured by largest maximum out-capacity](linksColouredByCapacity_populationNodesColouredByLargestMaxOutCapacity-fourfires.png)
 
-### Each population node that's inside at least one fire, its raster-cell coloured by the number of fires it sits inside:
-![Diagram: network vector-layer with each population node that's inside at least one fire, its raster-cell coloured by the number of fires it sits inside](populationNodesAndRasterOfNumFiresPopulationIsInside-fourfires.png)
+### "Safe" area surrounding fire:
+![Diagram: "safe" area surrounding fire](safeAreaSurroundingFire-fourfires.png)
 
 ![Diagram: maximum-flow applied to fire ffdi100a, Mount Alexander Shire](maxFlowFireA.png)
 
