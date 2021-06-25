@@ -25,3 +25,4 @@
 ### "Safe" area surrounding fire:
 ![Diagram: "safe" area surrounding fire](safeAreaSurroundingFire-fourfires.png)
 
+### Define exit-nodes as network-nodes that are both in the "safe" buffer-area and close to population?
