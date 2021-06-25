@@ -25,8 +25,3 @@
 ### "Safe" area surrounding fire:
 ![Diagram: "safe" area surrounding fire](safeAreaSurroundingFire-fourfires.png)
 
-![Diagram: maximum-flow applied to fire ffdi100a, Mount Alexander Shire](maxFlowFireA.png)
-
-![Diagram: maximum-flow applied to fire ffdi100a, in close-up](maxFlowFireA_closeUp.png)
-
-![Diagram: maximum-flow applied to fire ffdi100a, links coloured by flow](maxFlowFireA_linksColouredByFlow.png)
