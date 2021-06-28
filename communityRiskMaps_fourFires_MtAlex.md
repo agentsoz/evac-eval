@@ -17,7 +17,7 @@
 
 # Maximum-flow method run on fire ffdi100a
 
-### Inside the fire-perimeter:
+### Inside the fire-perimeter (road-links coloured by capacity):
 ![Diagram: inside perimeter of fire ffdi100a](insideFirePerimeter-ffdi100a-1000.png)
 
 ### Non-zero population inside the fire:
@@ -25,8 +25,8 @@
 
 ## Each population raster-cell with non-zero population and inside the fire is assigned a "population node" (injection-node) - the network node having largest maximum out-capacity
 
-### Links coloured by capacity and population nodes coloured by largest maximum out-capacity:
-![Diagram: network vector-layer with links coloured by capacity and population nodes coloured by largest maximum out-capacity](linksColouredByCapacity_populationNodesColouredByLargestMaxOutCapacity-1000-fourfires.png)
+### Population nodes coloured by largest maximum out-capacity:
+![Diagram: network vector-layer with population nodes coloured by largest maximum out-capacity](linksColouredByCapacity_populationNodesColouredByLargestMaxOutCapacity-1000-fourfires.png)
 
 ### "Safe" area surrounding fire:
 ![Diagram: "safe" area surrounding fire](safeAreaSurroundingFire-1000-fourfires.png)
