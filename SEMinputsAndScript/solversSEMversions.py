@@ -102,21 +102,34 @@ def geoJSONtoAdjacencyMatrix( JSONnetworkfilename, exitnodes ):
     print(f"WARNING: {numDuplicateLinestrings} duplicate LineStrings ignored.")
 #    raise Exception(f"WARNING: {numDuplicateLinestrings} duplicate Linestring{pluralIndicator} ignored.")  # TODO: should probably comment out this line, but will wait for more testing to see whether the exception is ever raised
 ##  exitnodes = []  # as of 16th April 2021, the previously-defined exit-nodes are an input-parameter to this function ('geoJSONtoAdjacencyMatrix')
-  for l in linestringsWithCoords:  # add any missing Points at the ends of LineStrings
-    for xy in l:
-      if xy not in pointsWithCoords:
-        print(f"Endpoint {xy} of LineString {l} is not in pointsWithCoords: adding it")
-        pointsWithCoords[ xy ] = currentPointID  # no longer works, so cannot have a missing Point that appears in a LineString
-#        exitnodes.append( currentPointID )  # include the missing Point as an exit-node: all non-missing-point exit-nodes are already specified as a parameter of this function ('geoJSONtoAdjacencyMatrix')  # TODO: confirm that this is what is generally desired
-        exitnodes.add( currentPointID )  # include the missing Point as an exit-node: all non-missing-point exit-nodes are already specified as a parameter of this function ('geoJSONtoAdjacencyMatrix')  # TODO: confirm that this is what is generally desired
-        print(f"WARNING: including originally-missing endpoint (PointID {currentPointID}) {xy} of LineString {l} as an exit-node: exitnodes is now {exitnodes}")
-        currentPointID += 1
-      else:
-#        print(f"Point {xy} is in pointsWithCoords")
-        pass
+#  for l in linestringsWithCoords:  # add any missing Points at the ends of LineStrings
+#    for xy in l:
+#      if xy not in pointsWithCoords:
+#        print(f"Endpoint {xy} of LineString {l} is not in pointsWithCoords: adding it")
+#        pointsWithCoords[ xy ] = currentPointID  # no longer works, so cannot have a missing Point that appears in a LineString
+##        exitnodes.append( currentPointID )
+#        exitnodes.add( currentPointID )  # include the missing Point as an exit-node: all non-missing-point exit-nodes are already specified as a parameter of this function ('geoJSONtoAdjacencyMatrix')  # TODO: confirm that this is what is generally desired
+#        print(f"WARNING: including originally-missing endpoint (PointID {currentPointID}) {xy} of LineString {l} as an exit-node: exitnodes is now {exitnodes}")
+#        currentPointID += 1
+#      else:
+##        print(f"Point {xy} is in pointsWithCoords")
+#        pass
 #  print("After addition of any missing points, pointsWithCoords is", pointsWithCoords)
   N = len(pointsWithCoords)
   print(f"After addition of any missing points, pointsWithCoords has {N} members.")
+  starttime = time.time()
+  E = len(linestringsWithCoords)
+  print(f"Before removal of every LineString with a missing-Point endpoint, linestringsWithCoords has {E} members.")
+  for l in list(linestringsWithCoords.keys()):  # remove every LineString that has at least one endpoint that is a missing Point
+    for xy in l:
+      if xy not in pointsWithCoords:
+#        print(f"Endpoint {xy} of LineString {l} is not in pointsWithCoords: removing this LineString")
+        del linestringsWithCoords[l]
+  endtime = time.time()
+  timeToRemoveLinestringsWithMissingEndpoints = endtime - starttime
+  E = len(linestringsWithCoords)
+#  print(f"After removal of every LineString with a missing-Point endpoint, linestringsWithCoords has {E} members.")
+  print(f"timeToRemoveLinestringsWithMissingEndpoints is {timeToRemoveLinestringsWithMissingEndpoints:.3} seconds.")
   adjacency = np.zeros( shape=(N,N) )  # construct adjacency matrix (used only by SEM2)
 #  pointcoordsbyID = {}
   pointcoordsandindexbyID = {}
@@ -2953,7 +2966,8 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointN
 #  print("Gmaximumflow.nodes() is %s" % Gmaximumflow.nodes())
 #  print("Gmaximumflow.edges() is %s" % Gmaximumflow.edges())
   # For each two-way link, split one arc (v1,v2) by adding a new dummy node d and replacing (v1,v2) with the pair of arcs (v1,d) and (d,v2), setting the capacity of both new arcs to that of the original arc (v1,v2):
-  print("Splitting each parallel arc into a pair of new arcs with a new dummy-node in between ...")
+  print("Splitting each anti-parallel arc into a pair of new arcs with a new dummy-node in between ...")
+  starttime_replaceAntiParallelArcs = time.time()
   alreadyProcessedArcs = []
   newArcsByDummyNode = {}
 #  for u in Gmaximumflow.nodes():
@@ -2970,6 +2984,9 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointN
     Gmaximumflow.add_edges_from( [(v,dummyNode), (dummyNode,u)] )
     Gmaximumflow.edges[v,dummyNode]['capacity'] = argsflowfunc['linkcapacity'][frozenset({u,v})]  # assume the capacity of each two-way link is the same in either direction
     Gmaximumflow.edges[dummyNode,u]['capacity'] = argsflowfunc['linkcapacity'][frozenset({u,v})]
+  endtime_replaceAntiParallelArcs = time.time()
+  timeToReplaceAntiParallelArcs = endtime_replaceAntiParallelArcs - starttime_replaceAntiParallelArcs
+  print(f"timeToReplaceAntiParallelArcs is {timeToReplaceAntiParallelArcs:.5f} seconds.")
 #  print("After replacement of parallel arcs, Gmaximumflow.nodes() is %s" % Gmaximumflow.nodes())
 #  print("Gmaximumflow.edges() is %s" % Gmaximumflow.edges())
 #  for u, v in Gmaximumflow.edges():
@@ -3006,7 +3023,7 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointN
       print(f"totalAssignedSubflowsIntoExitNode[{j}] is {totalAssignedSubflowsIntoExitNode[j]}: adding arc of that capacity from node {j} to super-sink (node '-2').")
       Gmaximumflow.add_edge(j, -2, capacity=totalAssignedSubflowsIntoExitNode[j])  # -2 is sink-node
   else:  # subflowsToAssignedExitNodesByInjectionNodeID == None
-    for nodeID1 in inflowsByNodeID:  # only for the injection-nodes with positive inflows do we need to  #construct the shortest path to each exit-node and its length
+    for nodeID1 in inflowsByNodeID:  # only to the injection-nodes with positive inflows do we need to add arcs from the super-source node '-1'
       i = pointcoordsandindexbyID[nodeID1]['index']
       print(f"inflowsByNodeID[{nodeID1}] is {inflowsByNodeID[nodeID1]}: adding arc of that capacity from super-source (node '-1') to node {i}.")
       Gmaximumflow.add_edge(-1, i, capacity=inflowsByNodeID[nodeID1])  # -1 is source-node
@@ -3916,7 +3933,7 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
 
 
 #############################################################################
-if __name__ == '__main__':  # Needed only if another file shall import this one as a module
+if __name__ == '__main__':  # Needed if other files import this one as a module, which they do
 #  DEBUG = False  # flag whether to print debugging-messages
 
   SEMversion = 'SEM2'  # use the basin-hopping global-optimisation solver
