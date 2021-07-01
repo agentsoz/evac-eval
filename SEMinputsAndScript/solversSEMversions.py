@@ -85,6 +85,7 @@ def geoJSONtoAdjacencyMatrix( JSONnetworkfilename, exitnodes ):
         linestringsWithCoords[key]['length'] = float( feature['properties']['length'] )
         linestringsWithCoords[key]['matsim_linkID'] = feature['properties']['matsim_linkID']
         linestringsWithCoords[key]['oneway'] = bool(int( feature['properties']['oneway'] ))  # convert value of feature['properties']['oneway'] to a Boolean: "1" becomes 'True' (and also "2", "3", "-1", etc.) and "0" becomes 'False', but "0.0" and any other string not expressing an integer will raise a ValueError. TODO: decide whether and how the 'oneway' property should affect which solutions are allowed
+        assert linestringsWithCoords[key]['oneway']  # we assume every arc specified in jsonobj["features"] is one-way, so that a two-arc link is specified as two one-way arcs
 #        linestringsWithCoords[key]['permlanes'] = int( feature['properties']['permlanes'] )
         linestringsWithCoords[key]['permlanes'] = float( feature['properties']['permlanes'] )  # TODO: ask Leorey what a non-integer 'permlanes' value such as 1.5 means
       else:
@@ -2898,8 +2899,8 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointN
 # TODO: maximum-flow method can't handle parallel arcs, so must replace each two-way edge, i.e. pair of arcs in opposite directions, by adding a dummy node; see p. 711 of 'Introduction to Algorithms', third edition.
   starttime = time.time()
   EPS = 1e-6
-  FINDMAXIMUMFLOWONSHORTESTPATHARCSONLY = False  #  in calculation of maximum flow, use all arcs of the graph
-#  FINDMAXIMUMFLOWONSHORTESTPATHARCSONLY = True  #  in calculation of maximum flow, use only the arcs that appear on shortest paths
+#  FINDMAXIMUMFLOWONSHORTESTPATHARCSONLY = False  #  in calculation of maximum flow, use all arcs of the graph
+  FINDMAXIMUMFLOWONSHORTESTPATHARCSONLY = True  #  in calculation of maximum flow, use only the arcs that appear on shortest paths
   inflowNodesByIndex = [pointcoordsandindexbyID[nodeID]['index'] for nodeID in inflowsByNodeID]
   print(f"inflowNodesByIndex is {inflowNodesByIndex}")
   alertsNodesWhereDemandNotSatisfied = {}
@@ -2929,31 +2930,33 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointN
       G.edges[u,v]['weight'] = predictedLinkTraversalTime[u,v]
 #      print(f"G.edges[{u},{v}]['weight'] is {G.edges[u,v]['weight']}")
     arcsInShortestPaths = []
-    totalAssignedSubflowsUsingArc = {}  # for each arc (u,v) that appears in at least one shortest path, the total of all assigned subflows that use (u,v)
-    for nodeID1 in subflowsToAssignedExitNodesByInjectionNodeID:  # only for the injection-nodes specified as keys of 'subflowsToAssignedExitNodesByInjectionNodeID' do we need to construct the shortest path to each exit-node and its length
+#    totalAssignedSubflowsUsingArc = {}  # for each arc (u,v) that appears in at least one shortest path, the total of all assigned subflows that use (u,v)
+#    for nodeID1 in subflowsToAssignedExitNodesByInjectionNodeID:  # only for the injection-nodes specified as keys of 'subflowsToAssignedExitNodesByInjectionNodeID' do we need to construct the shortest path to each exit-node and its length
+    for nodeID1 in inflowsByNodeID:  # construct the shortest weighted path and its length from every injection-node to every exit-node
       i = pointcoordsandindexbyID[nodeID1]['index']
-#      for nodeID2 in exitnodes:
-      for nodeID2 in subflowsToAssignedExitNodesByInjectionNodeID[nodeID1]:
+#      for nodeID2 in subflowsToAssignedExitNodesByInjectionNodeID[nodeID1]:
+      for nodeID2 in exitnodes:
         j = pointcoordsandindexbyID[nodeID2]['index']
-        print(f"injection-node is i={i}, exit-node is j={j}:")
+#        print(f"injection-node is i={i}, exit-node is j={j}:")
 #        shortestPathDijkstra = nx.dijkstra_path(G, i, j, weight = lambda u, v, predictedLinkTraversalTime: predictedLinkTraversalTime[u,v])
 #        print(f"shortestPathDijkstra is {shortestPathDijkstra} km")
         length, path = nx.single_source_dijkstra(G, i, j, weight='weight')
-        print(f"  path is {path}, length is {length} km.")
+#        print(f"  path is {path}, length is {length} km.")
         for k, u in enumerate(path[:-1]):
           v = path[k+1]
 #          print(f"(k is {k})  u is {u}, v is {v}")
           if (u,v) not in arcsInShortestPaths:
             arcsInShortestPaths.append( (u,v) )
-            totalAssignedSubflowsUsingArc[(u,v)] = 0.0
-          totalAssignedSubflowsUsingArc[(u,v)] += subflowsToAssignedExitNodesByInjectionNodeID[nodeID1][nodeID2]
+#            totalAssignedSubflowsUsingArc[(u,v)] = 0.0
+#          totalAssignedSubflowsUsingArc[(u,v)] += subflowsToAssignedExitNodesByInjectionNodeID[nodeID1][nodeID2]
     endtime_runShortestPathsAlgorithm = time.time()
     timetorunShortestPathsAlgorithm = endtime_runShortestPathsAlgorithm - starttime_runShortestPathsAlgorithm
     print(f"timetorunShortestPathsAlgorithm is {timetorunShortestPathsAlgorithm:.5f} seconds.")
     Gmaximumflow.add_edges_from( arcsInShortestPaths )
-    print(f"totalAssignedSubflowsUsingArc is {totalAssignedSubflowsUsingArc}")
+#    print(f"totalAssignedSubflowsUsingArc is {totalAssignedSubflowsUsingArc}")
     for u, v in Gmaximumflow.edges():
-      Gmaximumflow.edges[u,v]['capacity'] = min( argsflowfunc['linkcapacity'][frozenset({u,v})], totalAssignedSubflowsUsingArc[(u,v)] )
+#      Gmaximumflow.edges[u,v]['capacity'] = min( argsflowfunc['linkcapacity'][frozenset({u,v})], totalAssignedSubflowsUsingArc[(u,v)] )
+      Gmaximumflow.edges[u,v]['capacity'] = argsflowfunc['linkcapacity'][frozenset({u,v})]
 #      print(f"Gmaximumflow.edges[{u},{v}]['capacity'] is {Gmaximumflow.edges[u,v]['capacity']}")
 
   else:  # all arcs of graph will be used in calculation of maximum flow
@@ -3070,6 +3073,25 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointN
       j = pointcoordsandindexbyID[nodeID2]['index']
       outflowsByNodeID[pointNodeIDbyIndex[j]] = -maxflow_dict[j][-2]
   print(f"outflowsByNodeID is {outflowsByNodeID}")
+
+#  for (a,b) in list(qij.keys())[:5]:  # for debugging
+#    print(f"qij[{a},{b}] is {qij[a,b]}")
+#    nodeIDa = pointNodeIDbyIndex[a]
+#    nodeIDb = pointNodeIDbyIndex[b]
+#    print(f"qij[{repr(nodeIDa)},{repr(nodeIDb)}] is {qij[a,b]}")
+
+#  nodeID_possiblebug = '564640170'  # for debugging: this node appeared to violate the flow-conservation constraint
+#  j = pointcoordsandindexbyID[nodeID_possiblebug]['index']
+#  coordsOfj = pointcoordsandindexbyID[nodeID_possiblebug]['coords']
+#  print(f"Node with ID {repr(nodeID_possiblebug)} has index {j} and coords {coordsOfj}.")
+#  for (a,b) in arcs:
+#    if j in (a,b):
+#      nodeIDa = pointNodeIDbyIndex[a]
+#      nodeIDb = pointNodeIDbyIndex[b]
+#      print(f"Arc ({a},{b}) = ({repr(nodeIDa)},{repr(nodeIDb)}) is adjacent to node {j} = {repr(nodeID_possiblebug)}.")
+#      flowInArc = qij[a,b]
+#      print(f"flowInArc qij[{a},{b}] is {flowInArc}.")
+
   endtime_runMaximumFlowAlgorithm = time.time()
   timeToRunMaximumFlowAlgorithm = endtime_runMaximumFlowAlgorithm - starttime
   print(f"timeToRunMaximumFlowAlgorithm is {timeToRunMaximumFlowAlgorithm:.5f} seconds.")

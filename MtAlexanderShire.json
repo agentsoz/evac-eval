@@ -1,11 +1,16 @@
 {
-  "evacuationLayerUNUSED": "./mtAlexanderShire/20181109_mountalex_evac_ffdi100d_grid.tif",
+  "evacuationLayer_UNUSED": "./mtAlexanderShire/20181109_mountalex_evac_ffdi100d_grid.tif",
   "populationLayer": "modelinputsMtAlexander/sem/populationArchetypes_1000.tif",
   "networkGeoJSON": "modelinputsMtAlexander/sem/mount_alexander_shire_network_2018.links-readable.geojson",
   "outputGeoJSON": "outputsMtAlexander/SEMoutput_network.geojson",
-  "networkConfig" : {
+  "networkConfig_UNUSED" : {
     "constant": 100.0,
     "defaultLinkType": 3,
     "defaultDiameter": 1
-  }
+  },
+  "CELLSIZEFINE_m": 80.0,
+  "CELLSIZESMALL_m": 100.0,
+  "CELLSIZELARGE_m": 1000.0,
+  "INNERDIST_SAFEBUFFER_m": 1000.0,
+  "OUTERDIST_SAFEBUFFER_m": 2000.0
 }

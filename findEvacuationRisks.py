@@ -15,6 +15,7 @@ from geostack.io import geoJsonToVector, vectorToGeoJson
 from geostack.runner import runScript
 from geostack.gs_enums import GeometryType#, ReductionType
 import solversSEMversions
+import scipy.linalg
 
 # Check parameter types and values
 def getParam(cfgJson, param, type_options=None, checkGreater=None, default=None):
@@ -400,6 +401,7 @@ def findRisks(cfgJson):
     print(f"populationIsInsideFire dimensions is {dims}")
 #    NEGATIVEVALUE = -99.9
     inflowsByNodeID = dict()
+    inflowCoordsByNodeID = dict()
     # A raster seems to be indexed by [j,i] rather than [i,j]:
     for j in range(0, dims.ny):
       for i in range(0, dims.nx):
@@ -462,6 +464,8 @@ def findRisks(cfgJson):
             MATsimID_node = network_currentCell.getProperty( idx_largestMaxOutCapacityFound_cell, 'matsim_nodeID' )
             print(f"population[{j},{i}] is {population[j,i]}")
             inflowsByNodeID[MATsimID_node] = population[j,i]
+            inflowCoordsByNodeID[MATsimID_node] = np.array(network_currentCell.getPointCoordinate(idx_largestMaxOutCapacityFound_cell).to_list()[:2])  # take the first two coordinates only
+#            print(f"inflowCoordsByNodeID[{MATsimID_node}] is {inflowCoordsByNodeID[MATsimID_node]}")
           else:
             MATsimID_node = None
           print(f"Property 'largestMaxOutCapacityFound_cell' is {largestMaxOutCapacityFound_cell}, at node with idx {idx_largestMaxOutCapacityFound_cell} and MATsimID_node {MATsimID_node}")
@@ -472,7 +476,7 @@ def findRisks(cfgJson):
           network_currentCell.setProperty(idx_largestMaxOutCapacityFound_cell, "largestMaxOutCapacityInCell", largestMaxOutCapacityFound_cell)  # on the node inside the raster-cell that has the largest maximum out-capacity, set the property "largestMaxOutCapacityInCell" to this largest value
     print(f"inflowsByNodeID is {inflowsByNodeID}")
     print(f"len(inflowsByNodeID) is {len(inflowsByNodeID)}")
-    with open(pth.join(outputDir, f"networkWithPropertiesByCell_{int(CELLSIZELARGE_m)}.geojson"), "w") as f:
+    with open(pth.join(outputDir, f"networkWithPropertiesByCell_{int(CELLSIZELARGE_m)}_ffdi100{fireName}.geojson"), "w") as f:
       f.write(vectorToGeoJson(network))
     elapsedTime = time()
     print(f"findEvacuationRisks.py has run for {elapsedTime - startTime} seconds so far.")
@@ -540,13 +544,19 @@ def findRisks(cfgJson):
 #    runScript("atSafeDistFromPerimeter = dist >= INNERDIST_SAFEBUFFER_m && dist < OUTERDIST_SAFEBUFFER_m ? 1 : 0;", [atSafeDistFromPerimeter, dist])
     runScript("atSafeDistFromPerimeter = dist >= dist::INNERDIST_SAFEBUFFER_m && dist < dist::OUTERDIST_SAFEBUFFER_m ? 1 : 0;", [atSafeDistFromPerimeter, dist])
 ##    atSafeDistFromPerimeter.write(pth.join(outputDir, f"atSafeDistFromPerimeter_{int(fire_max_time):06d}.tif"))
-#    atSafeDistFromPerimeter.write(pth.join(outputDir, f"atSafeDistFromPerimeter__{int(rasterCellSize)}_ffdi100{fireName}.tif"))
-    atSafeDistFromPerimeter.write(pth.join(outputDir, f"atSafeDistFromPerimeter__ffdi100{fireName}.tif"))
+#    atSafeDistFromPerimeter.write(pth.join(outputDir, f"atSafeDistFromPerimeter__ffdi100{fireName}.tif"))
+    atSafeDistFromPerimeter.write(pth.join(outputDir, f"atSafeDistFromPerimeter__{int(rasterCellSize)}_ffdi100{fireName}.tif"))
 
     # Define the exit-nodes, at most one per raster-cell, as lying inside the "safe" buffer beyond the fire's perimeter and being, for each raster-cell, the road-network node, if any, that has the largest maximum in-capacity (or more simply, the first node found inside the raster-cell):
     dims = atSafeDistFromPerimeter.getDimensions()
     print(f"atSafeDistFromPerimeter dimensions is {dims}")
-    exitnodes = list()
+#    exitnodes = list()
+    exitnodes = set()
+#    EXITNODES_MUSTBECLOSETO_INJECTIONNODES = True  # remove each candidate exit-node that is not any injection-node's (equal-) closest candidate exit-node. The intention of this is to remove exit-nodes that are far from the injection-nodes. One problem with this, however, is that an exit-node on a highway might be removed simply because it's slightly farther from an injection-node than is another exit-node, even though the second exit-node is on a minor road and is therefore not necessarily a good exit-point.
+    EXITNODES_MUSTBECLOSETO_INJECTIONNODES = False  # A problem with this: if the number of exit-nodes is not reduced in some way then for fire ffdi100a it takes about 59 seconds to find shortest paths from all injection-nodes to all exit-nodes. If shortest paths aren't found, though, maximum-flow will find some very long paths from injection-nodes to exit-nodes. TODO: a solution to this dilemma might be to allow an exit-node only to lie on a high-capacity road-link, such as a highway.
+#    candidateExitNodes = dict()
+    candidateExitIndexByNodeID = dict()
+    candidateExitNodeCoords = dict()
     # A raster seems to be indexed by [j,i] rather than [i,j]:
     for j in range(0, dims.ny):
       for i in range(0, dims.nx):
@@ -563,17 +573,49 @@ def findRisks(cfgJson):
             break
           if idx_firstNodeFound_cell:
             MATsimID_node = network_currentCell.getProperty( idx_firstNodeFound_cell, 'matsim_nodeID' )
-            exitnodes.append(MATsimID_node)
+            if EXITNODES_MUSTBECLOSETO_INJECTIONNODES:
+#              candidateExitNodes[MATsimID_node] = True
+              pass
+            else:
+#              exitnodes.append(MATsimID_node)
+              exitnodes.add(MATsimID_node)
           else:
             MATsimID_node = None
-          if MATsimID_node == None:
-            print(f"WARNING: this raster-cell contains no node of the road-network.")
-          else:
+          if MATsimID_node:
             print(f"At node with idx {idx_firstNodeFound_cell}, MATsimID_node is {MATsimID_node}")
-            network_currentCell.setProperty(idx_firstNodeFound_cell, "isExitNode", 1)  # on the first node found inside the raster-cell, set the property "isExitNode" to 1
+            if EXITNODES_MUSTBECLOSETO_INJECTIONNODES:
+              candidateExitIndexByNodeID[MATsimID_node] = idx_firstNodeFound_cell
+              candidateExitNodeCoords[idx_firstNodeFound_cell] = np.array(network_currentCell.getPointCoordinate(idx_firstNodeFound_cell).to_list()[:2])  # take the first two coordinates only
+            else:
+              network_currentCell.setProperty(idx_firstNodeFound_cell, "isExitNode", 1)  # on the first node found inside the raster-cell, set the property "isExitNode" to 1
+          else:
+            print(f"WARNING: this raster-cell contains no node of the road-network.")
+    if EXITNODES_MUSTBECLOSETO_INJECTIONNODES:
+      INFINITEDISTANCE = 9e9
+      print(f"INFINITEDISTANCE is {INFINITEDISTANCE}.")
+      # Eliminate each candidate exit-node that is not any injection-node's (equal-) closest candidate exit-node. (The intention of this is to remove exit-nodes that are far from the injection-nodes.)
+      print(f"Candidate exit-nodes is {list(candidateExitIndexByNodeID.keys())}")
+      print(f"len(candidateExitIndexByNodeID) is {len(candidateExitIndexByNodeID)}")
+      for inflowNodeMATsimID in inflowCoordsByNodeID:
+        injectionNodeCoords = inflowCoordsByNodeID[inflowNodeMATsimID]
+        mindist_current = INFINITEDISTANCE
+#        for candidateExitMATsimID in candidateExitNodes:
+        for candidateExitMATsimID in candidateExitIndexByNodeID:
+          idx_candidateExit = candidateExitIndexByNodeID[candidateExitMATsimID]
+          candidateExitCoords = candidateExitNodeCoords[idx_candidateExit]
+          dist_twonodes = scipy.linalg.norm(injectionNodeCoords - candidateExitCoords)
+          assert dist_twonodes < INFINITEDISTANCE
+          if dist_twonodes < mindist_current:
+            mindist_current = dist_twonodes
+            idx_closestCandidateExit = idx_candidateExit
+            MATsimID_closestCandidateExit = candidateExitMATsimID
+        network_currentCell.setProperty(idx_closestCandidateExit, "isExitNode", 1)  # on this injection-node's closest exit-node, set the property "isExitNode" to 1
+        print(f"Adding to exitnodes the candidate exit-node {MATsimID_closestCandidateExit}, which is at distance {mindist_current} from injection-node {inflowNodeMATsimID}.")
+        exitnodes.add(MATsimID_closestCandidateExit)
+    exitnodes = list(exitnodes)  # convert from set to list
     print(f"exitnodes is {exitnodes}")
     print(f"len(exitnodes) is {len(exitnodes)}")
-    exitNodesAtSafeDistfilename = pth.join(outputDir, f"exitNodesAtSafeDist_{int(CELLSIZELARGE_m)}.geojson")
+    exitNodesAtSafeDistfilename = pth.join(outputDir, f"exitNodesAtSafeDist_{int(CELLSIZELARGE_m)}_ffdi100{fireName}.geojson")
 #    with open(pth.join(outputDir, f"exitNodesAtSafeDist_{int(CELLSIZELARGE_m)}.geojson"), "w") as f:
     with open(exitNodesAtSafeDistfilename, "w") as f:
       f.write(vectorToGeoJson(network))
@@ -583,6 +625,7 @@ def findRisks(cfgJson):
 
     elapsedTime = time()
     print(f"findEvacuationRisks.py has run for {elapsedTime - startTime} seconds so far.")
+#    sys.exit()
 
 #    # Map population per node to network-node inflow:
 ##    network.pointSample(inflowPerNodeInsidePerimeter)  # sample 'inflowPerNodeInsidePerimeter' raster at each point and write resulting value to the 'network' vector-layer
@@ -617,7 +660,9 @@ def findRisks(cfgJson):
 #      sys.exit()  # for debugging, exit before writing any files
 
 #      with open(f"{outName}_{int(fire_max_time):06d}_{outExt}", "w") as outfile:
-      with open(outputGeoJSONfilename, "w") as outfile:
+      assert outputGeoJSONfilename[-8:] == ".geojson"
+#      with open(outputGeoJSONfilename, "w") as outfile:
+      with open(outputGeoJSONfilename[:-8] + f"_{int(CELLSIZELARGE_m)}_ffdi100{fireName}.geojson", "w") as outfile:
 ##        outfile.write(vectorToGeoJson(outVector))
 #        outfile.write(SEMoutputGeoJSON)
         json.dump(SEMoutputGeoJSON, outfile)
