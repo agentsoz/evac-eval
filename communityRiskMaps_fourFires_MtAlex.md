@@ -32,6 +32,8 @@
 ![Diagram: "safe" area surrounding fire](safeAreaSurroundingFire-1000-fourfires.png)
 
 ### Define exit-nodes as network-nodes that are both in the "safe" buffer-area and close to population?
+### Exit-nodes in "safe" area:
+![Diagram: exit-nodes in "safe" area](exitNodesInSafeBuffer-fourfires.png)
 
 
 ### Maximum-flow solution:
