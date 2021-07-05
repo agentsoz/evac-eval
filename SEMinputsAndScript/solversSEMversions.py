@@ -15,6 +15,7 @@ import time
 import scipy.stats
 import json
 import copy
+from geostack.vector import BoundingBox
 
 #meanVehicleLength_Km = .005  # these two shouldn't be global variables, so their definitions have been moved inside function 'setuptrafficflowproblem()'
 #meanMinGapinStoppedTraffic_Km = .004
@@ -39,12 +40,15 @@ def phiOnLinkrs_inVehiclesPerKmPerLane( lK_rs, meanMinGapinStoppedTraffic_Km, me
 
 
 def geoJSONtoAdjacencyMatrix( JSONnetworkfilename, exitnodes ):
+  print(f"geoJSONtoAdjacencyMatrix(): JSONnetworkfilename is {JSONnetworkfilename}")
   with open(JSONnetworkfilename, 'r') as f:
     jsonobj = json.load(f)
 #  print("jsonobj is", jsonobj)
   assert jsonobj["type"] == 'FeatureCollection'
   numDuplicatePoints = 0  # count duplicate Point-features
+  numLinestrings = 0  # count LineString-features in JSON network-file
   numDuplicateLinestrings = 0  # count duplicate LineString-features
+  numUniqueLinestrings = 0  # count unique LineString-features
   pointsWithCoords = {}
   linestringsWithCoords = {}
 #  currentPointID = 0
@@ -67,6 +71,7 @@ def geoJSONtoAdjacencyMatrix( JSONnetworkfilename, exitnodes ):
         print(f"A Point with coordinates {key} already exists in pointsWithCoords")
         numDuplicatePoints += 1
     elif geometry['type'] == "LineString":
+      numLinestrings += 1
       assert len( geometry['coordinates'] ) == 2
       key = []  # construct a dictionary key, a two-tuple of two-tuples, from the LineString's pair of Point-coordinates
       for pointcoords in geometry['coordinates']:
@@ -88,6 +93,7 @@ def geoJSONtoAdjacencyMatrix( JSONnetworkfilename, exitnodes ):
         assert linestringsWithCoords[key]['oneway']  # we assume every arc specified in jsonobj["features"] is one-way, so that a two-arc link is specified as two one-way arcs
 #        linestringsWithCoords[key]['permlanes'] = int( feature['properties']['permlanes'] )
         linestringsWithCoords[key]['permlanes'] = float( feature['properties']['permlanes'] )  # TODO: ask Leorey what a non-integer 'permlanes' value such as 1.5 means
+        numUniqueLinestrings += 1
       else:
 #        print(f"A LineString with coordinates {key} already exists in linestringsWithCoords")
         numDuplicateLinestrings += 1
@@ -100,8 +106,9 @@ def geoJSONtoAdjacencyMatrix( JSONnetworkfilename, exitnodes ):
 #  print("linestringsWithCoords is", linestringsWithCoords)
   if numDuplicateLinestrings > 0:
     pluralIndicator = "s" if numDuplicateLinestrings > 1 else ""
-    print(f"WARNING: {numDuplicateLinestrings} duplicate LineStrings ignored.")
+    print(f"WARNING: {numDuplicateLinestrings} duplicate LineStrings ignored (not recorded in dictionary 'linestringsWithCoords').")
 #    raise Exception(f"WARNING: {numDuplicateLinestrings} duplicate Linestring{pluralIndicator} ignored.")  # TODO: should probably comment out this line, but will wait for more testing to see whether the exception is ever raised
+  assert numDuplicateLinestrings + numUniqueLinestrings == numLinestrings
 ##  exitnodes = []  # as of 16th April 2021, the previously-defined exit-nodes are an input-parameter to this function ('geoJSONtoAdjacencyMatrix')
 #  for l in linestringsWithCoords:  # add any missing Points at the ends of LineStrings
 #    for xy in l:
@@ -161,6 +168,7 @@ def geoJSONtoAdjacencyMatrix( JSONnetworkfilename, exitnodes ):
     b = pointsWithCoords[ l[1] ]['index']
 #    oneway[ frozenset({a,b}) ] = linestringsWithCoords[l]['oneway']
     oneway[(a,b)] = linestringsWithCoords[l]['oneway']
+    assert oneway[(a,b)] == 1  # each link must be specified in one direction only; to specify a two-way link, specify one link for each of its two directions
     adjacency[a,b] = 1
     if not oneway[(a,b)]:  # if {a,b} is not a one-way edge, then also set the (b,a) arc's 'adjacency' element to 1
       adjacency[b,a] = 1
@@ -2894,15 +2902,15 @@ def findShortestPathsSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, subf
 #  return (nextNodeInShortestPath, shortestDistanceToAnyExit, shortestPathToExit, shortestPathToAnyExit, parentsOnShortestPathsFromInjectionNodes, qijatnodei, densityijatnodei, qijatnodej, flowstateijatnodej, timetorunShortestPathsAlgorithm, timetocalculateshortestpaths, lK)
 
 
-def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointNodeIDbyIndex, inflowsByNodeID, subflowsToAssignedExitNodesByInjectionNodeID):
+#def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointNodeIDbyIndex, inflowsByNodeID, positivePopulationInsideFireByNodeID, subflowsToAssignedExitNodesByInjectionNodeID):
+def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointNodeIDbyIndex, positivePopulationInsideFireByNodeID, subflowsToAssignedExitNodesByInjectionNodeID):
 # Uses Edmonds-Karp maximum-flow algorithm?
 # TODO: maximum-flow method can't handle parallel arcs, so must replace each two-way edge, i.e. pair of arcs in opposite directions, by adding a dummy node; see p. 711 of 'Introduction to Algorithms', third edition.
   starttime = time.time()
   EPS = 1e-6
-#  FINDMAXIMUMFLOWONSHORTESTPATHARCSONLY = False  #  in calculation of maximum flow, use all arcs of the graph
-  FINDMAXIMUMFLOWONSHORTESTPATHARCSONLY = True  #  in calculation of maximum flow, use only the arcs that appear on shortest paths
-  inflowNodesByIndex = [pointcoordsandindexbyID[nodeID]['index'] for nodeID in inflowsByNodeID]
-  print(f"inflowNodesByIndex is {inflowNodesByIndex}")
+  INFINITY = 9999999.9  # TODO: is this sufficiently large?
+  FINDMAXIMUMFLOWONSHORTESTPATHARCSONLY = False  #  in calculation of maximum flow, use all arcs of the graph
+#  FINDMAXIMUMFLOWONSHORTESTPATHARCSONLY = True  #  in calculation of maximum flow, use only the arcs that appear on shortest paths; can take a prohibitively long time if there are many injection- and exit-nodes.
   alertsNodesWhereDemandNotSatisfied = {}
   alertsLinksPossiblyCausingCongestion = {}
   arcs = []
@@ -2913,7 +2921,8 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointN
     if not oneway[arc]:
       arcs.append( (b,a) )
 #  print("arcs is %s" % arcs)
-  Gmaximumflow = nx.DiGraph()  # maximum flow will be calculated using arcs of Gmaximumflow, using a networkx method such as 'single_source_dijkstra'
+#  Gmaximumflow = nx.Graph()  # causes networkx method 'maximum_flow' to give solution with many isolated cycles of links
+  Gmaximumflow = nx.DiGraph()  # Maximum flow will be calculated using arcs of Gmaximumflow, using the networkx method 'maximum_flow'; a DiGraph can have self-loops and anti-parallel edges, but not multiple (parallel) edges.
   if FINDMAXIMUMFLOWONSHORTESTPATHARCSONLY:  # use Dijkstra's algorithm:
     starttime_runShortestPathsAlgorithm = time.time()
     predictedLinkTraversalTime = {}  # traversal-time as might be predicted by a driver
@@ -2931,8 +2940,9 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointN
 #      print(f"G.edges[{u},{v}]['weight'] is {G.edges[u,v]['weight']}")
     arcsInShortestPaths = []
 #    totalAssignedSubflowsUsingArc = {}  # for each arc (u,v) that appears in at least one shortest path, the total of all assigned subflows that use (u,v)
-#    for nodeID1 in subflowsToAssignedExitNodesByInjectionNodeID:  # only for the injection-nodes specified as keys of 'subflowsToAssignedExitNodesByInjectionNodeID' do we need to construct the shortest path to each exit-node and its length
-    for nodeID1 in inflowsByNodeID:  # construct the shortest weighted path and its length from every injection-node to every exit-node
+##    for nodeID1 in subflowsToAssignedExitNodesByInjectionNodeID:  # only for the injection-nodes specified as keys of 'subflowsToAssignedExitNodesByInjectionNodeID' do we need to construct the shortest path to each exit-node and its length
+#    for nodeID1 in inflowsByNodeID:  # construct the shortest weighted path and its length from every injection-node to every exit-node
+    for nodeID1 in positivePopulationInsideFireByNodeID:  # construct the shortest weighted path and its length from every injection-node to every exit-node
       i = pointcoordsandindexbyID[nodeID1]['index']
 #      for nodeID2 in subflowsToAssignedExitNodesByInjectionNodeID[nodeID1]:
       for nodeID2 in exitnodes:
@@ -2968,32 +2978,39 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointN
 
 #  print("Gmaximumflow.nodes() is %s" % Gmaximumflow.nodes())
 #  print("Gmaximumflow.edges() is %s" % Gmaximumflow.edges())
-  # For each two-way link, split one arc (v1,v2) by adding a new dummy node d and replacing (v1,v2) with the pair of arcs (v1,d) and (d,v2), setting the capacity of both new arcs to that of the original arc (v1,v2):
-  print("Splitting each anti-parallel arc into a pair of new arcs with a new dummy-node in between ...")
-  starttime_replaceAntiParallelArcs = time.time()
-  alreadyProcessedArcs = []
-  newArcsByDummyNode = {}
-#  for u in Gmaximumflow.nodes():
-  for u, v in Gmaximumflow.edges():
-    if (v,u) in Gmaximumflow.edges() and (v,u) not in alreadyProcessedArcs:
-      dummyNode = f"dummyBetween{v}and{u}" 
-      newArcsByDummyNode[ dummyNode ] = ((v,dummyNode), (dummyNode,u))
-      alreadyProcessedArcs.append( (u,v) )
-#  print(f"alreadyProcessedArcs is {alreadyProcessedArcs}")
-#  print(f"newArcsByDummyNode is {newArcsByDummyNode}")
-  for dummyNode in newArcsByDummyNode:
-    ((v,dummyNode), (dummyNode,u)) = newArcsByDummyNode[ dummyNode ]
-    Gmaximumflow.remove_edge(v,u)
-    Gmaximumflow.add_edges_from( [(v,dummyNode), (dummyNode,u)] )
-    Gmaximumflow.edges[v,dummyNode]['capacity'] = argsflowfunc['linkcapacity'][frozenset({u,v})]  # assume the capacity of each two-way link is the same in either direction
-    Gmaximumflow.edges[dummyNode,u]['capacity'] = argsflowfunc['linkcapacity'][frozenset({u,v})]
-  endtime_replaceAntiParallelArcs = time.time()
-  timeToReplaceAntiParallelArcs = endtime_replaceAntiParallelArcs - starttime_replaceAntiParallelArcs
-  print(f"timeToReplaceAntiParallelArcs is {timeToReplaceAntiParallelArcs:.5f} seconds.")
-#  print("After replacement of parallel arcs, Gmaximumflow.nodes() is %s" % Gmaximumflow.nodes())
-#  print("Gmaximumflow.edges() is %s" % Gmaximumflow.edges())
-#  for u, v in Gmaximumflow.edges():
-#    print(f"Gmaximumflow.edges[{u},{v}]['capacity'] is {Gmaximumflow.edges[u,v]['capacity']}")
+  nodeID_possiblebug = '728021001'  # for debugging: this node appears to violate the flow-conservation constraint
+  REPLACEANTIPARALLELARCS = False
+#  REPLACEANTIPARALLELARCS = True
+  if REPLACEANTIPARALLELARCS:
+    # For each two-way link, split one arc (v1,v2) by adding a new dummy node d and replacing (v1,v2) with the pair of arcs (v1,d) and (d,v2), setting the capacity of both new arcs to that of the original arc (v1,v2):
+    print("Splitting each anti-parallel arc into a pair of new arcs with a new dummy-node in between ...")
+    starttime_replaceAntiParallelArcs = time.time()
+    alreadyProcessedArcs = []
+    newArcsByDummyNode = {}
+#    for u in Gmaximumflow.nodes():
+    for u, v in Gmaximumflow.edges():
+      if (v,u) in Gmaximumflow.edges() and (v,u) not in alreadyProcessedArcs:
+        dummyNode = f"dummyBetween{v}and{u}" 
+        # TODO: give the dummy-node coordinates that are shifted laterally, so the new edges can be displayed in QGIS without overwriting the original edge going in the opposite direction; specify a small angle alpha and define lateral distance = half-edge-length * tan(alpha)
+        newArcsByDummyNode[ dummyNode ] = ((v,dummyNode), (dummyNode,u))
+        alreadyProcessedArcs.append( (u,v) )
+#    print(f"alreadyProcessedArcs is {alreadyProcessedArcs}")
+#    print(f"newArcsByDummyNode is {newArcsByDummyNode}")
+    for dummyNode in newArcsByDummyNode:
+      ((v,dummyNode), (dummyNode,u)) = newArcsByDummyNode[ dummyNode ]
+      Gmaximumflow.remove_edge(v,u)
+      Gmaximumflow.add_edges_from( [(v,dummyNode), (dummyNode,u)] )
+      Gmaximumflow.edges[v,dummyNode]['capacity'] = argsflowfunc['linkcapacity'][frozenset({u,v})]  # assume the capacity of each two-way link is the same in either direction
+      Gmaximumflow.edges[dummyNode,u]['capacity'] = argsflowfunc['linkcapacity'][frozenset({u,v})]
+      if u == pointcoordsandindexbyID[nodeID_possiblebug]['index']:
+        print(f"Gmaximumflow.edges[{v},{dummyNode}]['capacity'] is {Gmaximumflow.edges[v,dummyNode]['capacity']}")
+    endtime_replaceAntiParallelArcs = time.time()
+    timeToReplaceAntiParallelArcs = endtime_replaceAntiParallelArcs - starttime_replaceAntiParallelArcs
+    print(f"timeToReplaceAntiParallelArcs is {timeToReplaceAntiParallelArcs:.5f} seconds.")
+#    print("After replacement of parallel arcs, Gmaximumflow.nodes() is %s" % Gmaximumflow.nodes())
+#    print("Gmaximumflow.edges() is %s" % Gmaximumflow.edges())
+#    for u, v in Gmaximumflow.edges():
+#      print(f"Gmaximumflow.edges[{u},{v}]['capacity'] is {Gmaximumflow.edges[u,v]['capacity']}")
 
   totalAssignedSubflowsFromInjectionNode = {}
   totalAssignedSubflowsIntoExitNode = {}  # will store total of subflows assigned to each exit-node
@@ -3025,44 +3042,83 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointN
     for j in totalAssignedSubflowsIntoExitNode:
       print(f"totalAssignedSubflowsIntoExitNode[{j}] is {totalAssignedSubflowsIntoExitNode[j]}: adding arc of that capacity from node {j} to super-sink (node '-2').")
       Gmaximumflow.add_edge(j, -2, capacity=totalAssignedSubflowsIntoExitNode[j])  # -2 is sink-node
+
   else:  # subflowsToAssignedExitNodesByInjectionNodeID == None
-    for nodeID1 in inflowsByNodeID:  # only to the injection-nodes with positive inflows do we need to add arcs from the super-source node '-1'
+#    for nodeID1 in inflowsByNodeID:  # only to the injection-nodes with positive inflows do we need to add arcs from the super-source node '-1'
+    for nodeID1 in positivePopulationInsideFireByNodeID:  # only to the injection-nodes with positive inflows do we need to add arcs from the super-source node '-1'
       i = pointcoordsandindexbyID[nodeID1]['index']
-      print(f"inflowsByNodeID[{nodeID1}] is {inflowsByNodeID[nodeID1]}: adding arc of that capacity from super-source (node '-1') to node {i}.")
-      Gmaximumflow.add_edge(-1, i, capacity=inflowsByNodeID[nodeID1])  # -1 is source-node
-    INFINITECAPACITY = 9999999  # TODO: is this sufficiently large?
+##      print(f"inflowsByNodeID[{nodeID1}] is {inflowsByNodeID[nodeID1]}: adding arc of that capacity from super-source (node '-1') to node {i}.")  # incorrect: arc from super-source to injection-node should have infinite capacity
+##      Gmaximumflow.add_edge(-1, i, capacity=inflowsByNodeID[nodeID1])  # -1 is source-node
+#      print(f"Adding arc of 'infinite' capacity {INFINITY} from super-source (node '-1') to node {i}.")
+      Gmaximumflow.add_edge(-1, i, capacity=INFINITY)  # -1 is super-source node
     for nodeID2 in exitnodes:
       j = pointcoordsandindexbyID[nodeID2]['index']
-      print(f"Adding arc of 'infinite' capacity {INFINITECAPACITY} from node {j} to super-sink (node '-2').")
-      Gmaximumflow.add_edge(j, -2, capacity=INFINITECAPACITY)  # -2 is sink-node
+#      print(f"Adding arc of 'infinite' capacity {INFINITY} from node {j} to super-sink (node '-2').")
+      Gmaximumflow.add_edge(j, -2, capacity=INFINITY)  # -2 is super-sink node
 
 #  print("Gmaximumflow.nodes() is %s" % Gmaximumflow.nodes())
 #  print("Gmaximumflow.edges() is %s" % Gmaximumflow.edges())
-  maxPossibleFlow, maxflow_dict = nx.maximum_flow(Gmaximumflow, -1, -2)
+  # Run maximum-flow method:
+  maxPossibleFlow, maxflow_dict = nx.maximum_flow(Gmaximumflow, -1, -2)  # by default, the link-attribute 'capacity' indicates each link's flow-capacity
   print(f"maxPossibleFlow is {maxPossibleFlow} veh/hr.")
 #  print(f"maxflow_dict is {maxflow_dict}")
-  for i in maxflow_dict[-1]:
-    print(f"maxflow_dict[-1][{i}] is {maxflow_dict[-1][i]}")
+#  for i in maxflow_dict[-1]:
+#    print(f"maxflow_dict[-1][{i}] is {maxflow_dict[-1][i]}")
+#  sys.exit()
 
   qij = {}  # store initial flows in all arcs, i.e. directed edges, that are in the shortest-path tree
   for i in [a for a in maxflow_dict if a not in (-1,-2)]:  # don't include arcs from the artificial source-node (-1) or sink-node (-2)
     for j in [b for b in maxflow_dict[i] if b not in (-1,-2)]:  # don't include arcs to the artificial source-node (-1) or sink-node (-2)
       qij[i,j] = maxflow_dict[i][j]
-  for dummyNode in newArcsByDummyNode:  # remove each dummy-node, converting its new arcs back to the original parallel arc:
-    ((v,dummyNode), (dummyNode,u)) = newArcsByDummyNode[ dummyNode ]
-    Gmaximumflow.add_edge(v,u)
-    Gmaximumflow.remove_edges_from( [(v,dummyNode), (dummyNode,u)] )
-    Gmaximumflow.remove_node(dummyNode)
-    Gmaximumflow.edges[v,u]['capacity'] = argsflowfunc['linkcapacity'][frozenset({u,v})]  # assume the capacity of each two-way link is the same in either direction
-    assert qij[v,dummyNode] == qij[dummyNode,u]
-    qij[v,u] = qij[v,dummyNode]
-    del qij[v,dummyNode]
-    del qij[dummyNode,u]
-#  print("After restoration of every parallel arc and removal of its dummy-node, Gmaximumflow.nodes() is %s" % Gmaximumflow.nodes())
+      assert qij[i,j] >= 0.0
+
+  if REPLACEANTIPARALLELARCS:
+    for dummyNode in newArcsByDummyNode:  # remove each dummy-node, converting its new arcs back to the original parallel arc:
+      ((v,dummyNode), (dummyNode,u)) = newArcsByDummyNode[ dummyNode ]
+      Gmaximumflow.add_edge(v,u)
+      Gmaximumflow.remove_edges_from( [(v,dummyNode), (dummyNode,u)] )
+      Gmaximumflow.remove_node(dummyNode)
+      Gmaximumflow.edges[v,u]['capacity'] = argsflowfunc['linkcapacity'][frozenset({u,v})]  # assume the capacity of each two-way link is the same in either direction
+      assert qij[v,dummyNode] == qij[dummyNode,u]
+      if u == pointcoordsandindexbyID[nodeID_possiblebug]['index']:
+        print(f"Before removal of dummyNode {dummyNode} and restoration of original antiparallel arc ({v},{u}), qij[{v},{dummyNode}] is {qij[v,dummyNode]}, qij[{dummyNode},{u}] is {qij[dummyNode,u]}.")
+      qij[v,u] = qij[v,dummyNode]
+      del qij[v,dummyNode]
+      del qij[dummyNode,u]
+#    print("After restoration of every parallel arc and removal of its dummy-node, Gmaximumflow.nodes() is %s" % Gmaximumflow.nodes())
+      if u == pointcoordsandindexbyID[nodeID_possiblebug]['index']:
+        print(f"After removal of dummyNode {dummyNode} and restoration of original antiparallel arc ({v},{u}), qij[{v},{u}] is {qij[v,u]} and qij[{u},{v}] is {qij[u,v]}.")
 #  print("Gmaximumflow.edges() is %s" % Gmaximumflow.edges())
 #  for u, v in Gmaximumflow.edges():
 #    print(f"Gmaximumflow.edges[{u},{v}]['capacity'] is {Gmaximumflow.edges[u,v]['capacity']}")
 #  print(f"qij is {qij}")
+
+  # Verify that each node, other than super-source and super-sink, obeys the flow-conservation constraint:
+  sumOfFlowEnteringNode = dict()
+  for (u,v) in qij:
+    nodeIDu = pointNodeIDbyIndex[u]
+    nodeIDv = pointNodeIDbyIndex[v]
+    if nodeIDu in sumOfFlowEnteringNode:
+      sumOfFlowEnteringNode[nodeIDu] -= qij[u,v]
+    else:
+      sumOfFlowEnteringNode[nodeIDu] = -qij[u,v]
+    if nodeIDv in sumOfFlowEnteringNode:
+      sumOfFlowEnteringNode[nodeIDv] += qij[u,v]
+    else:
+      sumOfFlowEnteringNode[nodeIDv] = qij[u,v]
+  for nodeID in sumOfFlowEnteringNode:
+#    if nodeIDu not in inflowsByNodeID and nodeIDu not in exitnodes:
+    if nodeIDu not in positivePopulationInsideFireByNodeID and nodeIDu not in exitnodes:
+      try:
+#        assert sumOfFlowEnteringNode[nodeIDu] == 0.0
+        assert abs(sumOfFlowEnteringNode[nodeIDu]) <= EPS
+#        print(f"sumOfFlowEnteringNode[{nodeIDu}] is {sumOfFlowEnteringNode[nodeIDu]:.6f}: equals zero, so obeys flow-conservation constraint.")
+      except:
+#        print(f"nodeID {nodeID}: sumOfFlowEnteringNode[{nodeIDu}] is {sumOfFlowEnteringNode[nodeIDu]:.6f}")
+        print(f"sumOfFlowEnteringNode[{nodeIDu}] is {sumOfFlowEnteringNode[nodeIDu]:.6f}: non-zero value, so violates flow-conservation constraint.")
+        raise
+  # TODO: there appear to be isolated cycles of links in the maximum-flow solution - must these be eliminated, or do they contain no critical links and do they not affect injection-nodes' evacuation-times?
+
   outflowsByNodeID = {}
   if subflowsToAssignedExitNodesByInjectionNodeID != None:
     for j in totalAssignedSubflowsIntoExitNode:
@@ -3071,31 +3127,58 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointN
   else:
     for nodeID2 in exitnodes:
       j = pointcoordsandindexbyID[nodeID2]['index']
-      outflowsByNodeID[pointNodeIDbyIndex[j]] = -maxflow_dict[j][-2]
+#      outflowsByNodeID[pointNodeIDbyIndex[j]] = -maxflow_dict[j][-2]
+      outflowsByNodeID[nodeID2] = -maxflow_dict[j][-2]
   print(f"outflowsByNodeID is {outflowsByNodeID}")
 
-#  for (a,b) in list(qij.keys())[:5]:  # for debugging
+#  for (a,b) in list(qij.keys())[:5]:  # (debugging) print flow qij for first few arcs
 #    print(f"qij[{a},{b}] is {qij[a,b]}")
 #    nodeIDa = pointNodeIDbyIndex[a]
 #    nodeIDb = pointNodeIDbyIndex[b]
 #    print(f"qij[{repr(nodeIDa)},{repr(nodeIDb)}] is {qij[a,b]}")
 
-#  nodeID_possiblebug = '564640170'  # for debugging: this node appeared to violate the flow-conservation constraint
-#  j = pointcoordsandindexbyID[nodeID_possiblebug]['index']
-#  coordsOfj = pointcoordsandindexbyID[nodeID_possiblebug]['coords']
-#  print(f"Node with ID {repr(nodeID_possiblebug)} has index {j} and coords {coordsOfj}.")
-#  for (a,b) in arcs:
-#    if j in (a,b):
-#      nodeIDa = pointNodeIDbyIndex[a]
-#      nodeIDb = pointNodeIDbyIndex[b]
-#      print(f"Arc ({a},{b}) = ({repr(nodeIDa)},{repr(nodeIDb)}) is adjacent to node {j} = {repr(nodeID_possiblebug)}.")
-#      flowInArc = qij[a,b]
-#      print(f"flowInArc qij[{a},{b}] is {flowInArc}.")
+#  nodeID_possiblebug = '97560366'  # for debugging: this node appears to violate the flow-conservation constraint
+  j = pointcoordsandindexbyID[nodeID_possiblebug]['index']
+  coordsOfj = pointcoordsandindexbyID[nodeID_possiblebug]['coords']
+  print(f"Node with ID {repr(nodeID_possiblebug)} has index {j} and coords {coordsOfj}.")
+  if FINDMAXIMUMFLOWONSHORTESTPATHARCSONLY:
+    arcsInGmaximumflow = arcsInShortestPaths
+  else:
+    arcsInGmaximumflow = arcs
+  for (a,b) in arcsInGmaximumflow:
+    if j in (a,b):
+      nodeIDa = pointNodeIDbyIndex[a]
+      nodeIDb = pointNodeIDbyIndex[b]
+      print(f"Arc ({a},{b}) = ({repr(nodeIDa)},{repr(nodeIDb)}) is adjacent to node {j} = {repr(nodeID_possiblebug)}.")
+      flowInArc = qij[a,b]
+      print(f"flowInArc qij[{a},{b}] is {flowInArc}.")
 
   endtime_runMaximumFlowAlgorithm = time.time()
   timeToRunMaximumFlowAlgorithm = endtime_runMaximumFlowAlgorithm - starttime
   print(f"timeToRunMaximumFlowAlgorithm is {timeToRunMaximumFlowAlgorithm:.5f} seconds.")
+#  sys.exit()
 
+  # Calculate the time needed to evacuate each injection-node, in hours:
+  inflowsByNodeID_maxFlowSoln = {}  # the inflows at injection-nodes as given by the maximum-flow solution
+  assert subflowsToAssignedExitNodesByInjectionNodeID == None  # probably won't use subflows from now on (mid-June 2021)
+  evacuationTimeByNodeID = dict()  # time needed to evacuate each injection-node, in hours
+#  for nodeID1 in inflowsByNodeID:
+  for nodeID1 in positivePopulationInsideFireByNodeID:
+    i = pointcoordsandindexbyID[nodeID1]['index']
+    inflowsByNodeID_maxFlowSoln[nodeID1] = maxflow_dict[-1][i]
+    assert inflowsByNodeID_maxFlowSoln[nodeID1] >= 0.0
+#    print(f"inflowsByNodeID[{nodeID1}] is {inflowsByNodeID[nodeID1]}, inflowsByNodeID_maxFlowSoln[{nodeID1}] is {inflowsByNodeID_maxFlowSoln[nodeID1]}.")
+#      if maxflow_dict[-1][i] < inflowsByNodeID[nodeID1]:
+#    evacuationTimeByNodeID[nodeID1] = inflowsByNodeID[nodeID1] / inflowsByNodeID_maxFlowSoln[nodeID1]  # time needed to evacuate this injection-node, assuming the demand-flow 
+    if inflowsByNodeID_maxFlowSoln[nodeID1] <= EPS:
+      evacuationTimeByNodeID[nodeID1] = INFINITY  # time needed to evacuate this injection-node, in hours
+      print(f"evacuationTimeByNodeID[{nodeID1}] = positivePopulationInsideFireByNodeID[{nodeID1}]/inflowsByNodeID_maxFlowSoln[{nodeID1}] = {positivePopulationInsideFireByNodeID[nodeID1]}/{inflowsByNodeID_maxFlowSoln[nodeID1]} = {evacuationTimeByNodeID[nodeID1]} hours.")
+    else:
+      evacuationTimeByNodeID[nodeID1] = positivePopulationInsideFireByNodeID[nodeID1] / inflowsByNodeID_maxFlowSoln[nodeID1]  # time needed to evacuate this injection-node, in hours
+      print(f"evacuationTimeByNodeID[{nodeID1}] = positivePopulationInsideFireByNodeID[{nodeID1}]/inflowsByNodeID_maxFlowSoln[{nodeID1}] = {positivePopulationInsideFireByNodeID[nodeID1]}/{inflowsByNodeID_maxFlowSoln[nodeID1]} = {positivePopulationInsideFireByNodeID[nodeID1]/inflowsByNodeID_maxFlowSoln[nodeID1]} hours.")
+  print(f"inflowsByNodeID_maxFlowSoln is {inflowsByNodeID_maxFlowSoln}")
+
+  # Generate alert-messages about congestion in links:
   if subflowsToAssignedExitNodesByInjectionNodeID != None:
     totalSubflowsIntoAssignedExitNodes = sum(f for f in totalAssignedSubflowsIntoExitNode.values())
     assert totalAssignedSubflowsFromInjectionNodes == totalSubflowsIntoAssignedExitNodes
@@ -3112,39 +3195,49 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointN
     for i in totalAssignedSubflowsFromInjectionNode:
       if maxflow_dict[-1][i] < totalAssignedSubflowsFromInjectionNode[i]:
         alertsNodesWhereDemandNotSatisfied[i] = f"ALERT: steady-state (i.e. consistent with flows found by maximum-flow method) injection-flow {maxflow_dict[-1][i]} into injection-node {pointNodeIDbyIndex[i]} is less than total flow {totalAssignedSubflowsFromInjectionNode[i]} required there to supply its assigned exit-nodes."
-  else:
-    totalInflowsAtSpecifiedInjectionNodes = sum(f for f in inflowsByNodeID.values())
-    if maxPossibleFlow < totalInflowsAtSpecifiedInjectionNodes:
-      alertCongestionInNetwork = f"ALERT: maximum possible flow through network of {maxPossibleFlow} veh/hr is exceeded by sum of inflows at specified injection-nodes of {totalInflowsAtSpecifiedInjectionNodes} veh/hr: congestion will occur."
-#      print(alertCongestionInNetwork)
-#      alertCongestionInNetworks.append( alertCongestionInNetwork )
-    else:
-      assert abs(maxPossibleFlow - totalInflowsAtSpecifiedInjectionNodes) <= EPS
-      absenceOfCongestionMessage = f"Maximum possible flow through network of {maxPossibleFlow} veh/hr >= sum of inflows at specified injection-nodes of {totalInflowsAtSpecifiedInjectionNodes} veh/hr; N.B. congestion might still occur along subflow-paths."
-      print(absenceOfCongestionMessage)
-#      alertCongestionInNetworks.append( absenceOfCongestionMessage )
-      alertCongestionInNetwork = None
-    for nodeID1 in inflowsByNodeID:
-      i = pointcoordsandindexbyID[nodeID1]['index']
-      if maxflow_dict[-1][i] < inflowsByNodeID[nodeID1]:
-        alertsNodesWhereDemandNotSatisfied[i] = f"ALERT: steady-state (i.e. consistent with flows found by maximum-flow method) injection-flow {maxflow_dict[-1][i]} into injection-node {nodeID1} is less than specified inflow {inflowsByNodeID[nodeID1]} there."
 
+  else:  # subflowsToAssignedExitNodesByInjectionNodeID == None
+#    totalInflowsAtSpecifiedInjectionNodes = sum(f for f in inflowsByNodeID.values())
+#    if maxPossibleFlow < totalInflowsAtSpecifiedInjectionNodes:
+#      alertCongestionInNetwork = f"ALERT: maximum possible flow through network of {maxPossibleFlow} veh/hr is exceeded by sum of inflows at specified injection-nodes of {totalInflowsAtSpecifiedInjectionNodes} veh/hr: congestion will occur."
+##      print(alertCongestionInNetwork)
+##      alertCongestionInNetworks.append( alertCongestionInNetwork )
+#    else:
+#      assert abs(maxPossibleFlow - totalInflowsAtSpecifiedInjectionNodes) <= EPS
+#      absenceOfCongestionMessage = f"Maximum possible flow through network of {maxPossibleFlow} veh/hr >= sum of inflows at specified injection-nodes of {totalInflowsAtSpecifiedInjectionNodes} veh/hr; N.B. congestion might still occur along subflow-paths."
+#      print(absenceOfCongestionMessage)
+##      alertCongestionInNetworks.append( absenceOfCongestionMessage )
+#      alertCongestionInNetwork = None
+#    for nodeID1 in inflowsByNodeID:
+#      i = pointcoordsandindexbyID[nodeID1]['index']
+##      if maxflow_dict[-1][i] < inflowsByNodeID[nodeID1]:
+#      if inflowsByNodeID_maxFlowSoln[nodeID1] < inflowsByNodeID[nodeID1]:
+##        alertsNodesWhereDemandNotSatisfied[i] = f"ALERT: steady-state (i.e. consistent with flows found by maximum-flow method) injection-flow {maxflow_dict[-1][i]} into injection-node {nodeID1} is less than specified inflow {inflowsByNodeID[nodeID1]} there."
+#        alertsNodesWhereDemandNotSatisfied[i] = f"ALERT: steady-state (i.e. consistent with flows found by maximum-flow method) injection-flow {inflowsByNodeID_maxFlowSoln[nodeID1]} into injection-node {nodeID1} is less than specified inflow {inflowsByNodeID[nodeID1]} there."
+    pass  # There's no need for the above alerts, as the demand for inflow at an injection-node can't be specified ahead of time as a finite value: the demand is infinite, and traffic will inject itself into the network up to the limit given by the maximum flow.
+
+  criticalLinks = []
   for (u,v) in qij:
     if abs(qij[u,v] - Gmaximumflow.edges[u,v]['capacity']) <= EPS:
-#      alertsLinksPossiblyCausingCongestion[u,v] = f"ALERT: steady-state (i.e. consistent with flows found by maximum-flow method) flow {qij[u,v]} in arc ({pointNodeIDbyIndex[u]},{pointNodeIDbyIndex[v]}) is equal or close to link-capacity {Gmaximumflow.edges[u,v]['capacity']} on that link: it's possible this link's capacity being too low is a cause of congestion in the network."
-      alertsLinksPossiblyCausingCongestion[u,v] = f"ALERT: steady-state (i.e. consistent with flows found by maximum-flow method) flow {qij[u,v]} in arc ({pointNodeIDbyIndex[u]},{pointNodeIDbyIndex[v]}) is equal or close to link-capacity {Gmaximumflow.edges[u,v]['capacity']} on that link."
+      nodeIDu = pointNodeIDbyIndex[u]
+      nodeIDv = pointNodeIDbyIndex[v]
+##      alertsLinksPossiblyCausingCongestion[u,v] = f"ALERT: steady-state (i.e. consistent with flows found by maximum-flow method) flow {qij[u,v]} in arc ({pointNodeIDbyIndex[u]},{pointNodeIDbyIndex[v]}) is equal or close to link-capacity {Gmaximumflow.edges[u,v]['capacity']} on that link: it's possible this link's capacity being too low is a cause of congestion in the network."
+#      alertsLinksPossiblyCausingCongestion[u,v] = f"ALERT: steady-state (i.e. consistent with flows found by maximum-flow method) flow {qij[u,v]} in arc ({pointNodeIDbyIndex[u]},{pointNodeIDbyIndex[v]}) is equal or close to link-capacity {Gmaximumflow.edges[u,v]['capacity']} on that link."
+      alertsLinksPossiblyCausingCongestion[u,v] = f"Maximum-flow-method flow {qij[u,v]} in arc ({nodeIDu},{nodeIDv}) is about equal to link-capacity {Gmaximumflow.edges[u,v]['capacity']}."
+      criticalLinks.append( (nodeIDu,nodeIDv) )
   endtime_calculatecongestionpoints = time.time()
   timeToCalculateCongestionPoints = endtime_calculatecongestionpoints - endtime_runMaximumFlowAlgorithm
   print(f"timeToCalculateCongestionPoints is {timeToCalculateCongestionPoints:.5f} seconds.")
 #  sys.exit()
-###  return (nextNodeInShortestPath, shortestDistanceToAnyExit, shortestPathToExit, shortestPathToAnyExit, parentsOnShortestPathsFromInjectionNodes, qijatnodei, densityijatnodei, qijatnodej, flowstateijatnodej, timeToRunMaximumFlowAlgorithm, timeToCalculateCongestionPoints, lK)
-##  return (qij, timeToRunMaximumFlowAlgorithm, timeToCalculateCongestionPoints, lK)
-#  return (qij, totalAssignedSubflowsFromInjectionNode, outflowsByNodeID, alertCongestionInNetwork, alertsNodesWhereDemandNotSatisfied, alertsLinksPossiblyCausingCongestion, timeToRunMaximumFlowAlgorithm, timeToCalculateCongestionPoints)
-  return (qij, totalAssignedSubflowsFromInjectionNode, maxflow_dict, outflowsByNodeID, alertCongestionInNetwork, alertsNodesWhereDemandNotSatisfied, alertsLinksPossiblyCausingCongestion, timeToRunMaximumFlowAlgorithm, timeToCalculateCongestionPoints)
+####  return (nextNodeInShortestPath, shortestDistanceToAnyExit, shortestPathToExit, shortestPathToAnyExit, parentsOnShortestPathsFromInjectionNodes, qijatnodei, densityijatnodei, qijatnodej, flowstateijatnodej, timeToRunMaximumFlowAlgorithm, timeToCalculateCongestionPoints, lK)
+###  return (qij, timeToRunMaximumFlowAlgorithm, timeToCalculateCongestionPoints, lK)
+##  return (qij, totalAssignedSubflowsFromInjectionNode, outflowsByNodeID, alertCongestionInNetwork, alertsNodesWhereDemandNotSatisfied, alertsLinksPossiblyCausingCongestion, timeToRunMaximumFlowAlgorithm, timeToCalculateCongestionPoints)
+#  return (qij, totalAssignedSubflowsFromInjectionNode, maxflow_dict, outflowsByNodeID, alertCongestionInNetwork, alertsNodesWhereDemandNotSatisfied, alertsLinksPossiblyCausingCongestion, timeToRunMaximumFlowAlgorithm, timeToCalculateCongestionPoints)
+  return (qij, totalAssignedSubflowsFromInjectionNode, maxflow_dict, outflowsByNodeID, evacuationTimeByNodeID, criticalLinks, alertsNodesWhereDemandNotSatisfied, alertsLinksPossiblyCausingCongestion, timeToRunMaximumFlowAlgorithm, timeToCalculateCongestionPoints)
 
 
 #def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperiodsByNodeID, exitnodes, simulDuration=14/3600):
-def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperiodsByNodeID, exitnodes, subflowsToAssignedExitNodesByInjectionNodeID, simulDuration=1.0):  # SEM4 specifies a duration (in hours) for the simulated propagation of wave- and shock-fronts
+def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperiodsByNodeID, exitnodes, positivePopulationInsideFireByNodeID, fireBounds, subflowsToAssignedExitNodesByInjectionNodeID, simulDuration=1.0):  # SEM4 specifies a duration (in hours) for the simulated propagation of wave- and shock-fronts
   starttime = time.time()
   print("inflowsByNodeID is", inflowsByNodeID)
   print(f"subflowsToAssignedExitNodesByInjectionNodeID is {subflowsToAssignedExitNodesByInjectionNodeID}")
@@ -3155,27 +3248,27 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
   (terminatorPressure, eps, flowfunc, flowijfunc, derivijfunc, adjacency, N, exitnodes, injectionnodes, indexamonginjectionorexitnodes, neighboursThatCanReceiveFlowFromi, neighboursThatCanFlowIntoj, hExitNodes, argsflowfunc, pointcoordsandindexbyID, pointNodeIDbyIndex, linestringsWithCoords) = setuptrafficflowproblem( JSONnetworkfilename, exitnodes, SEMversion )
 
 #  print("runSEM(): injectionnodes is", injectionnodes)
-  b0 = np.zeros( len(injectionnodes) )
-#  b0[3] = 1000.0  # TODO: should be determined via 'inflowsByNodeID'
-#  print(f"inflowsByNodeID is {inflowsByNodeID}")
-#  for i in range(N):  # node N-1 won't have any neighbours not already considered
-#  for i in injectionnodes:
-  for id in inflowsByNodeID:
-##    b0[indexamonginjectionorexitnodes[id]] = inflowsByNodeID[id]
-#    print(f"pointcoordsandindexbyID['{id}'] is {pointcoordsandindexbyID[id]}")
-    b0[indexamonginjectionorexitnodes[ pointcoordsandindexbyID[id]['index'] ]] = inflowsByNodeID[ id ]
-  print("b0 (inflow at injection-nodes) is", b0)
-  assert len(b0) == len(injectionnodes)
+  if SEMversion in ('SEM2', 'SEM3', 'SEM4'):
+    b0 = np.zeros( len(injectionnodes) )
+#    b0[3] = 1000.0  # TODO: should be determined via 'inflowsByNodeID'
+#    print(f"inflowsByNodeID is {inflowsByNodeID}")
+#    for i in range(N):  # node N-1 won't have any neighbours not already considered
+#    for i in injectionnodes:
+    for id in inflowsByNodeID:
+##      b0[indexamonginjectionorexitnodes[id]] = inflowsByNodeID[id]
+#      print(f"pointcoordsandindexbyID['{id}'] is {pointcoordsandindexbyID[id]}")
+      b0[indexamonginjectionorexitnodes[ pointcoordsandindexbyID[id]['index'] ]] = inflowsByNodeID[ id ]
+    print("b0 (inflow at injection-nodes) is", b0)
+    assert len(b0) == len(injectionnodes)
+    print("Total inflow is sum(b0) =", sum(b0))
+#    v0 = np.full( shape=len(b0), fill_value=SPEEDOFINJECTEDTRAFFIC)  # speed of traffic as it enters each injection-node, in kilometres per hour
+#    print("v0 (speed of traffic as it enters an injection-node) is", v0)
 
 #  SPEEDOFINJECTEDTRAFFIC = 10  # assumed speed of injected traffic at every injection-node (speed of traffic as it enters an injection-node), in kilometres per hour
 #  SPEEDOFINJECTEDTRAFFIC = 13  # assumed speed of injected traffic at every injection-node (speed of traffic as it enters an injection-node), in kilometres per hour
 #  SPEEDOFINJECTEDTRAFFIC = 20  # assumed speed of injected traffic at every injection-node (speed of traffic as it enters an injection-node), in kilometres per hour
 #  SPEEDOFINJECTEDTRAFFIC = 30  # assumed speed of injected traffic at every injection-node (speed of traffic as it enters an injection-node), in kilometres per hour
 
-#  v0 = np.full( shape=len(b0), fill_value=SPEEDOFINJECTEDTRAFFIC)  # speed of traffic as it enters each injection-node, in kilometres per hour
-#  print("v0 (speed of traffic as it enters an injection-node) is", v0)
-  totalinflow = sum(b0)
-  print("totalinflow is sum(b0) =", totalinflow)
   endtime = time.time()
   timetodefineproblemandnetworkandprocessgraph = endtime - starttime
   print("Definition of problem and network, and processing of graph, took %.5f seconds." % timetodefineproblemandnetworkandprocessgraph)
@@ -3479,11 +3572,16 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
 #    (nextNodeInShortestPath, shortestDistanceToAnyExit, shortestPathToExit, shortestPathToAnyExit, parentsOnShortestPathsFromInjectionNodes, qijatnodei, densityijatnodei, qijatnodej, flowstateijatnodej, timetorunShortestPathsAlgorithm, timetocalculateshortestpaths, lK) = findShortestPathsSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, subflowsToAssignedExitNodesByInjectionNodeID)
 
 ###            flowstateijatnodej  # is this important to have?
-    (qij, totalAssignedSubflowsFromInjectionNode, maxflow_dict, outflowsByNodeID, alertCongestionInNetwork, alertsNodesWhereDemandNotSatisfied, alertsLinksPossiblyCausingCongestion, timeToRunMaximumFlowAlgorithm, timeToCalculateShortestPaths) = findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointNodeIDbyIndex, inflowsByNodeID, subflowsToAssignedExitNodesByInjectionNodeID)
-    print(f"alertCongestionInNetwork is '{alertCongestionInNetwork}'")
+#    (qij, totalAssignedSubflowsFromInjectionNode, maxflow_dict, outflowsByNodeID, alertCongestionInNetwork, alertsNodesWhereDemandNotSatisfied, alertsLinksPossiblyCausingCongestion, timeToRunMaximumFlowAlgorithm, timeToCalculateShortestPaths) = findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointNodeIDbyIndex, inflowsByNodeID, positivePopulationInsideFireByNodeID, subflowsToAssignedExitNodesByInjectionNodeID)
+    (qij, totalAssignedSubflowsFromInjectionNode, maxflow_dict, outflowsByNodeID, evacuationTimeByNodeID, criticalLinks, alertsNodesWhereDemandNotSatisfied, alertsLinksPossiblyCausingCongestion, timeToRunMaximumFlowAlgorithm, timeToCalculateShortestPaths) = findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointNodeIDbyIndex, positivePopulationInsideFireByNodeID, subflowsToAssignedExitNodesByInjectionNodeID)
+    print(f"evacuationTimeByNodeID is {evacuationTimeByNodeID}")
+#    print(f"alertCongestionInNetwork is '{alertCongestionInNetwork}'")
     print(f"alertsNodesWhereDemandNotSatisfied is {alertsNodesWhereDemandNotSatisfied}")
-    print(f"alertsLinksPossiblyCausingCongestion is {alertsLinksPossiblyCausingCongestion}")
-    print(f"There are {len(alertsLinksPossiblyCausingCongestion)} links with flow at capacity.")
+##    print(f"alertsLinksPossiblyCausingCongestion is {alertsLinksPossiblyCausingCongestion}")
+#    print(f"criticalLinks is {criticalLinks}")
+    numCriticalLinks = len(criticalLinks)
+    assert numCriticalLinks == len(alertsLinksPossiblyCausingCongestion)
+    print(f"There are {numCriticalLinks} links with flow at capacity.")
 
 
 
@@ -3502,14 +3600,18 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
   outputGeoJSON["bbox"] = [BBwest, BBsouth, BBeast, BBnorth]
   outputGeoJSON["features"] = []
 #  print("injectionnodes is", injectionnodes)
-  assert len(inflowsByNodeID) <= len(injectionnodes)
-  for i in [j for j in injectionnodes if j not in inflowsByNodeID]:
-    inflowsByNodeID[i] = 0.0
-#  print("inflowsByNodeID is", inflowsByNodeID)
-  assert len(inflowsByNodeID) == len(injectionnodes)
-  nonzeroinflowsByNodeID = {nodeID: inflow for (nodeID, inflow) in inflowsByNodeID.items() if inflow > 0.0}
-  print("nonzeroinflowsByNodeID is", nonzeroinflowsByNodeID)
-#  print("sorted( pointcoordsandindexbyID.keys() ) is", sorted( pointcoordsandindexbyID.keys() ) )
+  if SEMversion in ('SEM1', 'SEM2', 'SEM3', 'SEM4'):
+    assert len(inflowsByNodeID) <= len(injectionnodes)
+    for i in [j for j in injectionnodes if j not in inflowsByNodeID]:
+      inflowsByNodeID[i] = 0.0
+#    print("inflowsByNodeID is", inflowsByNodeID)
+    assert len(inflowsByNodeID) == len(injectionnodes)
+    print(f"len(inflowsByNodeID) {len(inflowsByNodeID)} == len(injectionnodes) {len(injectionnodes)}.")
+    nonzeroinflowsByNodeID = {nodeID: inflow for (nodeID, inflow) in inflowsByNodeID.items() if inflow > 0.0}
+    print("nonzeroinflowsByNodeID is", nonzeroinflowsByNodeID)
+    print(f"len(nonzeroinflowsByNodeID) is {len(nonzeroinflowsByNodeID)}.")
+
+##  print("sorted( pointcoordsandindexbyID.keys() ) is", sorted( pointcoordsandindexbyID.keys() ) )
 #  for nodeID in sorted( pointcoordsbyID.keys() ):
   for nodeID in sorted( pointcoordsandindexbyID.keys() ):
     pointJSON = {}
@@ -3525,12 +3627,18 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
         pointJSON["properties"]["inflow"] = inflowsByNodeID[nodeID]
       elif SEMversion == 'SEM5':
         i = pointcoordsandindexbyID[nodeID]['index']
-#        if i in totalAssignedSubflowsFromInjectionNode:
-        if nodeID in nonzeroinflowsByNodeID:
+##        if i in totalAssignedSubflowsFromInjectionNode:
+#        if nodeID in nonzeroinflowsByNodeID:
+        if nodeID in positivePopulationInsideFireByNodeID:
+          pointJSON["properties"]["population"] = positivePopulationInsideFireByNodeID[nodeID]
 #          print(f"maxflow_dict[-1][{i}] is {maxflow_dict[-1][i]}")
           pointJSON["properties"]["inflow"] = maxflow_dict[-1][i]
+          pointJSON["properties"]["evacuationTime"] = evacuationTimeByNodeID[nodeID]
         else:
           pointJSON["properties"]["inflow"] = 0.0
+          # Population is zero at this node, so "evacuationTime" is undefined
+##          pointJSON["properties"]["evacuationTime"] = 'zeroPopulationAtNode'
+#          pointJSON["properties"]["evacuationTime"] = -1  # indicates zero population and therefore zero demanded inflow at this node; is a number rather than a string so that QGIS can depict 'evacuationTime' with a graduated colour-scale
       if SEMversion == 'SEM2':  # Newton-Raphson or the global optimiser was used
 #        pointJSON["properties"]["head"] = hInjectionNodes[indexamonginjectionorexitnodes[nodeID]]
         pointJSON["properties"]["head"] = hInjectionNodes[indexamonginjectionorexitnodes[pointcoordsandindexbyID[nodeID]['index']]]
@@ -3541,8 +3649,8 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
     else:  # the current node is an exit-node
       if SEMversion in ('SEM1', 'SEM2'):  # Newton-Raphson or the global optimiser was used
         pointJSON["properties"]["inflow"] = outflowsByNodeID[pointcoordsandindexbyID[nodeID]['index']]
-#      elif SEMversion in ('SEM3', 'SEM4', 'SEM5'):
-      else:
+#      else:
+      elif SEMversion in ('SEM3', 'SEM4', 'SEM5'):
         pointJSON["properties"]["inflow"] = outflowsByNodeID[nodeID]
       if SEMversion == 'SEM2':  # Newton-Raphson or the global optimiser was used
 #        pointJSON["properties"]["head"] = hExitNodes[indexamonginjectionorexitnodes[nodeID]]
@@ -3553,6 +3661,8 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
     pointJSON["type"] = "Feature"
     outputGeoJSON["features"].append(pointJSON)
 
+  print(f"fireBounds is {fireBounds}")
+  criticalLinksInsideFireBoundingBox = []
 #  for linkID in sorted( linkcoordsbyID.keys() ):
   for (linkcoords, linkproperties) in linestringsWithCoords.items():  # 'linkcoords' is a two-tuple of two-tuples
     linkJSON = {}
@@ -3566,35 +3676,66 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
 #    linkJSON["properties"]["diameter"] = linkproperties['diameter']
 ##    print(f'linkJSON["properties"]["diameter"] is {linkJSON["properties"]["diameter"]}')
     (a, b) = tuple(linkproperties['endpointNodeIDs'])
-    if (a,b) in qij:
-      if SEMversion == 'SEM2':  # found shortest-path routes, rather than using the global optimiser
-        linkJSON["properties"]["flow"] = qij[a, b]
-      elif SEMversion == 'SEM3':  # found shortest-path routes, rather than using the global optimiser
-        linkJSON["properties"]["flow"] = densityijatnodej[frozenset({a, b})] * speedijatnodej[frozenset({a, b})]
-      elif SEMversion == 'SEM4':  # found shortest-path routes, rather than using the global optimiser
-        linkJSON["properties"]["flow"] = timeaveragedflowsinlinksoverSimulDuration[a, b]
-      elif SEMversion == 'SEM5':  # found maximum possible flow in network
-        linkJSON["properties"]["flow"] = qij[a, b]
-        if (a,b) in alertsLinksPossiblyCausingCongestion:
-          linkJSON["properties"]["alert"] = alertsLinksPossiblyCausingCongestion[a,b]
-    elif (b,a) in qij:
-      if SEMversion == 'SEM2':  # found shortest-path routes, rather than using the global optimiser
-        linkJSON["properties"]["flow"] = -qij[b, a]
-      elif SEMversion == 'SEM3':  # found shortest-path routes, rather than using the global optimiser
-        linkJSON["properties"]["flow"] = -densityijatnodej[frozenset({b, a})] * speedijatnodej[frozenset({b, a})]
-      elif SEMversion == 'SEM4':  # found shortest-path routes, rather than using the global optimiser
-        linkJSON["properties"]["flow"] = -timeaveragedflowsinlinksoverSimulDuration[b, a]
-      elif SEMversion == 'SEM5':  # found maximum possible flow in network
-        linkJSON["properties"]["flow"] = -qij[b, a]
-        if (b,a) in alertsLinksPossiblyCausingCongestion:
-          linkJSON["properties"]["alert"] = alertsLinksPossiblyCausingCongestion[b,a]
-    else:
-#      try:
-#        linkJSON["properties"]["flow"] = -densityijatnodej[frozenset({b, a})] * speedijatnodej[frozenset({b, a})]
-#      except:
-#        print(f"densityijatnodej[frozenset({{{b}, {a}}})] is {densityijatnodej[frozenset({b, a})]}, speedijatnodej[frozenset({{{b}, {a}}})] is {speedijatnodej[frozenset({b, a})]}")
-#        raise
-      linkJSON["properties"]["flow"] = 'linkNotUsedInAShortestPath'  # TODO: should the 'flow' in this case be 0.0?
+    if SEMversion in ('SEM2','SEM3','SEM4'):
+      if (a,b) in qij:
+        if SEMversion == 'SEM2':  # found shortest-path routes, rather than using the global optimiser
+          linkJSON["properties"]["flow"] = qij[a, b]
+        elif SEMversion == 'SEM3':  # found shortest-path routes, rather than using the global optimiser
+          linkJSON["properties"]["flow"] = densityijatnodej[frozenset({a, b})] * speedijatnodej[frozenset({a, b})]
+        elif SEMversion == 'SEM4':  # found shortest-path routes, rather than using the global optimiser
+          linkJSON["properties"]["flow"] = timeaveragedflowsinlinksoverSimulDuration[a, b]
+      elif (b,a) in qij:
+        if SEMversion == 'SEM2':  # found shortest-path routes, rather than using the global optimiser
+          linkJSON["properties"]["flow"] = -qij[b, a]
+        elif SEMversion == 'SEM3':  # found shortest-path routes, rather than using the global optimiser
+          linkJSON["properties"]["flow"] = -densityijatnodej[frozenset({b, a})] * speedijatnodej[frozenset({b, a})]
+        elif SEMversion == 'SEM4':  # found shortest-path routes, rather than using the global optimiser
+          linkJSON["properties"]["flow"] = -timeaveragedflowsinlinksoverSimulDuration[b, a]
+      else:
+#        try:
+#          linkJSON["properties"]["flow"] = -densityijatnodej[frozenset({b, a})] * speedijatnodej[frozenset({b, a})]
+#        except:
+#          print(f"densityijatnodej[frozenset({{{b}, {a}}})] is {densityijatnodej[frozenset({b, a})]}, speedijatnodej[frozenset({{{b}, {a}}})] is {speedijatnodej[frozenset({b, a})]}")
+#          raise
+#        linkJSON["properties"]["flow"] = 'linkNotUsedInAShortestPath'  # TODO: should the 'flow' in this case be 0.0?
+#        linkJSON["properties"]["flow"] = -1  # indicates this link isn't used in the maximum-flow solution, but is a number so that QGIS can depict 'flow' with a graduated colour-scale
+        linkJSON["properties"]["flow"] = 0.0  # indicates this link isn't used in the maximum-flow solution, but is a number so that QGIS can depict 'flow' with a graduated colour-scale
+
+    elif SEMversion == 'SEM5':  # found maximum possible flow in network
+      if (a,b) in qij:
+#        linkJSON["properties"]["flow"] = qij[a, b]
+        linkJSON["properties"]["flow"] = float(qij[a, b])
+#        if (a,b) in alertsLinksPossiblyCausingCongestion:
+#          linkJSON["properties"]["alert"] = alertsLinksPossiblyCausingCongestion[a,b]
+        nodeIDa = pointNodeIDbyIndex[a]
+        nodeIDb = pointNodeIDbyIndex[b]
+        if (nodeIDa,nodeIDb) in criticalLinks:
+#          print(f"Critical link: linkcoords is {linkcoords}.")
+          ((x0, y0), (x1, y1)) = linkcoords
+          w = min(x0, x1)
+          e = max(x0, x1)
+          s = min(y0, y1)
+          n = max(y0, y1)
+#          if fireBounds.bbox_contains_coordinate:
+          if BoundingBox.boundingBoxContains(fireBounds, BoundingBox([[w,s],[e,n]])):
+            linkJSON["properties"]["isCritical"] = 1
+            criticalLinksInsideFireBoundingBox.append( (nodeIDa,nodeIDb) )
+#            print("Link is inside fireBounds.")
+          else:
+            linkJSON["properties"]["isCritical"] = 0
+#            print("Link is outside fireBounds.")
+        else:
+          linkJSON["properties"]["isCritical"] = 0
+#      elif (b,a) in qij:
+##        linkJSON["properties"]["flow"] = -qij[b, a]
+#        linkJSON["properties"]["flow"] = float(qij[b, a])  # link can be two-way
+#        if (b,a) in alertsLinksPossiblyCausingCongestion:
+#          linkJSON["properties"]["alert"] = alertsLinksPossiblyCausingCongestion[b,a]
+      else:
+#        linkJSON["properties"]["flow"] = 'linkNotUsedInAShortestPath'  # TODO: should the 'flow' in this case be 0.0?
+#        linkJSON["properties"]["flow"] = -1  # indicates this link isn't used in the maximum-flow solution, but is a number so that QGIS can depict 'flow' with a graduated colour-scale
+        linkJSON["properties"]["flow"] = 0.0  # indicates this link isn't used in the maximum-flow solution, but is a number so that QGIS can depict 'flow' with a graduated colour-scale
+
 #    linkJSON["properties"]["k"] =  # TODO: necessary for SEM2?
     linkJSON["properties"]["length"] = linkproperties['length']
     linkJSON["properties"]["matsim_linkID"] = linkproperties['matsim_linkID']
@@ -3757,8 +3898,9 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
       if pointNodeIDbyIndex[node] in exitnodes:
         nodecolourvalues.append('lightblue')
 ##      elif pointNodeIDbyIndex[node] in subflowsToAssignedExitNodesByInjectionNodeID:
-#      elif pointNodeIDbyIndex[node] in inflowsByNodeID:
-      elif pointNodeIDbyIndex[node] in nonzeroinflowsByNodeID:
+##      elif pointNodeIDbyIndex[node] in inflowsByNodeID:
+#      elif pointNodeIDbyIndex[node] in nonzeroinflowsByNodeID:
+      elif SEMversion in ('SEM2','SEM3','SEM4') and pointNodeIDbyIndex[node] in nonzeroinflowsByNodeID:
 #        nodecolourvalues.append('yellow')
         nodecolourvalues.append('red')
       else:
@@ -3785,8 +3927,11 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
 #        hvaluelabels[i] = "h = %.*f" % (DECIMALPLACES, terminatorPressure)
         hvaluelabels[i] = "h = %.0f" % terminatorPressure
       else:
-        if b0[indexamonginjectionorexitnodes[i]] > 0.0:  # don't display an inflow if it's zero
-          inflowlabels[i] = b0[indexamonginjectionorexitnodes[i]]
+###    for id in inflowsByNodeID:
+##          inflowlabels[i] = b0[indexamonginjectionorexitnodes[i]]
+#        if inflowsByNodeID[ pointNodeIDbyIndex[i] ] > 0.0:  # don't display an inflow if it's zero
+        if SEMversion in ('SEM2','SEM3','SEM4') and inflowsByNodeID[ pointNodeIDbyIndex[i] ] > 0.0:  # don't display an inflow if it's zero
+          inflowlabels[i] = inflowsByNodeID[ pointNodeIDbyIndex[i] ]
           print(f"inflowlabels[{i}] is now {inflowlabels[i]}")
         if SEMversion == 'SEM2':  # used Newton-Raphson or global optimiser, rather than finding shortest-path routes
 #          hvaluerounded = round(hInjectionNodes[indexamonginjectionorexitnodes[i]], DECIMALPLACES)
@@ -3856,7 +4001,8 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
       if pointNodeIDbyIndex[v] in exitnodes:
         nodelabels[v] = str(v)
 #      elif pointNodeIDbyIndex[v] in subflowsToAssignedExitNodesByInjectionNodeID:
-      elif pointNodeIDbyIndex[v] in inflowsByNodeID:
+#      elif pointNodeIDbyIndex[v] in inflowsByNodeID:
+      elif pointNodeIDbyIndex[v] in positivePopulationInsideFireByNodeID:
         nodelabels[v] = str(v)
       else:
 #        nodelabels[v] = ''
@@ -3951,7 +4097,8 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
     print(f"Drawing of graph took {timetodrawgraph:.5f} seconds.")
     plt.show()
 
-  return outputGeoJSON
+#  return outputGeoJSON, criticalLinks
+  return outputGeoJSON, criticalLinksInsideFireBoundingBox
 
 
 #############################################################################
