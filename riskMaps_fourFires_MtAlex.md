@@ -27,18 +27,18 @@
 ![Diagram: exit-nodes in "safe" area](exitNodesInSafeBuffer-fourfires.png)
 
 
-### Maximum-flow solution (thickness of a green link indicates flow; population nodes coloured by evaucation-time):
+### Maximum-flow solution (thickness of a green link indicates flow; population nodes coloured by evacuation-time):
 ![Diagram: maximum-flow solution](maxFlowSoln_linksColouredByFlow_populationNodesColouredByEvacuationTime-fourfires.png)
 
 
 
 # The three types of evacuation risk, measured across all four fires
 
-## Community risk per population node (mean time taken to evacuate node, over all fires that contain it within their perimeters):
+## Community risk per population node (mean time taken to evacuate node, over all fires that contain it within their perimeters) - a white node has zero inflow in the maximum-flow solution for at least one fire, so its evacuation-time is infinite:
 ![Diagram: community risk per population node](communityRiskPerPopulationNode-1000-fourfires.png)
 
 
-## Ignition risk per fire (number of population nodes plus number of critical links within fire-perimeter):
+## Ignition risk per fire (number of population nodes plus number of critical links within fire-perimeter) - where fires overlap, the ignition risks are added:
 ![Diagram: Ignition risk per fire](ignitionRiskPerFire-1000-fourfires.png)
 
 
