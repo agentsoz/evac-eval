@@ -2,10 +2,8 @@
 
 ![Diagram: fires ffdi100{a,b,c,d}, Mount Alexander Shire](fourOverlappingFiresMtAlex.png)
 
-![Diagram: raster-layer showing how many fire-perimeters each cell lies inside](rasterLayer-numFirePerimetersInside-fourfires.png)
-
-### Population archetypes superimposed, as a coarser-grained raster:
-![Diagram: with population archetypes as coarse-grained raster](populationArchetypesSuperimposed-coarseGrainedRaster-1000-fourfires.png)
+### Population archetypes superimposed:
+![Diagram: with population archetypes superimposed](populationArchetypesSuperimposedOnFires-fourfires.png)
 
 
 
@@ -25,15 +23,16 @@
 ### "Safe" area surrounding fire:
 ![Diagram: "safe" area surrounding fire](safeAreaSurroundingFire-1000-fourfires.png)
 
-### Define exit-nodes as network-nodes lying in the "safe" buffer-area:
+### Define exit-nodes as network-nodes lying in the "safe" buffer-area (thickness of a road-link indicates capacity):
 ![Diagram: exit-nodes in "safe" area](exitNodesInSafeBuffer-fourfires.png)
 
 
-### Maximum-flow solution:
+### Maximum-flow solution (thickness of a green link indicates flow; population nodes coloured by evaucation-time):
 ![Diagram: maximum-flow solution](maxFlowSoln_linksColouredByFlow_populationNodesColouredByEvacuationTime-fourfires.png)
 
-### Number of evacuation-flows each road-link is critical to:
 
+
+# The three types of evacuation risk, measured across all four fires
 
 ## Community risk per population node (mean time taken to evacuate node, over all fires that contain it within their perimeters):
 ![Diagram: community risk per population node](communityRiskPerPopulationNode-1000-fourfires.png)
