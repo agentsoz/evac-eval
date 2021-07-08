@@ -119,10 +119,10 @@ def findRisks(cfgJson):
   allFires_bounds = fire.getBounds()
   allFires_bounds.extend(20000.0)  # extend bounds of the fire layer by 20 km; TODO: the purpose of this extension is to cover all fires; in general, it might be necessary to calculate a union of the fire-rasters
 
-  # Read network:
-  print(f"Reading network data from {JSONnetworkfilename} ...")
-  network = geoJsonToVector(JSONnetworkfilename)
-  network_proj = network.getProjectionParameters()
+  # Read road-network vector-layer:
+  print(f"Reading road-network data from {JSONnetworkfilename} ...")
+  roadNetwork = geoJsonToVector(JSONnetworkfilename)
+  network_proj = roadNetwork.getProjectionParameters()
   # Restrict the network's bounds to a smaller area around the fire, then convert these bounds to the network projection:
 #  network_bounds = fire.getBounds()
 ##  network_bounds = allFires_bounds  # bug: allFires_bounds will be changed by 'extend' in the next line
@@ -133,19 +133,19 @@ def findRisks(cfgJson):
   print(f"network_bounds is {network_bounds}")
   assert network_bounds == allFires_bounds
 
-  networkBounds0 = network.getBounds()
-  print(f"network.getBounds() is {networkBounds0}")
+  networkBounds0 = roadNetwork.getBounds()
+  print(f"roadNetwork.getBounds() is {networkBounds0}")
 
   network_bounds = network_bounds.convert(network_proj, allFires_proj)
   print(f"network_bounds after conversion to network_proj is {network_bounds}")
 
-  network = network.region(network_bounds)  # clip network to allFires_bounds
-  networkBounds1 = network.getBounds()
-  print(f"network.getBounds() after clipping to network.region(network_bounds) is {networkBounds1}")
+  roadNetwork = roadNetwork.region(network_bounds)  # clip roadNetwork to allFires_bounds
+  networkBounds1 = roadNetwork.getBounds()
+  print(f"roadNetwork.getBounds() after clipping to roadNetwork.region(network_bounds) is {networkBounds1}")
 
-  network = network.convert(allFires_proj)  # convert network to same projection as the 'fire' raster, for point-sampling
-#  networkBounds2 = network.getBounds()
-#  print(f"network.getBounds() after conversion to allFires_proj is {networkBounds2}")  # network bounds are now wide again - a bug in Geostack?
+  roadNetwork = roadNetwork.convert(allFires_proj)  # convert roadNetwork to same projection as the 'fire' raster, for point-sampling
+#  networkBounds2 = roadNetwork.getBounds()
+#  print(f"roadNetwork.getBounds() after conversion to allFires_proj is {networkBounds2}")  # roadNetwork bounds are now wide again - a bug in Geostack?
 
   print("Creating 'numFiresInside' layer ...")  # to count the number of fire-perimeters each cell is inside
 #  numFiresInside = Raster(name="numFiresInside", data_type=np.uint32)
@@ -188,11 +188,12 @@ def findRisks(cfgJson):
 #      currentFire = RasterFile(name = f"fire_fireName", filePath = evacuationLayer, backend = 'gdal')
       currentFire = RasterFile(name = f"currentFire", filePath = evacuationLayer, backend = 'gdal')
       currentFire.read()
-#    fire_proj = currentFire.getProjectionParameters()
-#    print(f"fire_proj is {fire_proj}")
-    fire_max_time = np.nanmax(currentFire.data)  # time that defines perimeter of fire's maximum extent
-    currentFire.setVariableData("fireMaxTime", fire_max_time)  # set fireMaxTime in 'currentFire' layer
-    runScript('numFiresInside += currentFire < currentFire::fireMaxTime ? 1 : 0;', [numFiresInside, currentFire] )  # add 1 to value of cell if inside the fire-perimeter, 0 otherwise
+##    fire_proj = currentFire.getProjectionParameters()
+##    print(f"fire_proj is {fire_proj}")
+#    fire_max_time = np.nanmax(currentFire.data)  # time that defines perimeter of fire's maximum extent
+#    currentFire.setVariableData("fireMaxTime", fire_max_time)  # set fireMaxTime in 'currentFire' layer
+#    runScript('numFiresInside += currentFire < currentFire::fireMaxTime ? 1 : 0;', [numFiresInside, currentFire] )  # add 1 to value of cell if inside the fire-perimeter, 0 otherwise
+    runScript('numFiresInside += currentFire > 0 ? 1 : 0;', [numFiresInside, currentFire] )  # add 1 to value of cell if inside the fire-perimeter, 0 otherwise
 
   dims = numFiresInside.getDimensions()
   print(f"numFiresInside dimensions is {dims}")
@@ -226,20 +227,22 @@ def findRisks(cfgJson):
 
 #  sys.exit()
 
-#  network.pointSample(numFiresInside)  # sample 'numFiresInside' raster at each point and write resulting value to the 'network' vector-layer
+#  roadNetwork.pointSample(numFiresInside)  # sample 'numFiresInside' raster at each point and write resulting value to the 'roadNetwork' vector-layer
 #  with open(pth.join(outputDir, f"clippedNetwork_{int(CELLSIZELARGE_m)}.geojson"), "w") as f:
-#    f.write(vectorToGeoJson(network))
+#    f.write(vectorToGeoJson(roadNetwork))
 
 
-#  # Read fire arrival-time input-layers:
-  # For each fire, define injection- and exit-nodes then calculate maximum flow from injection- to exit-nodes:
-  numCriticalLinksByFire = dict()
-  numFiresLinkIsCriticalTo = dict()
+  # For each fire, define injection- and exit-nodes, then calculate maximum flow from injection- to exit-nodes:
+  meanTimeToEvacuateByPopulationNode = dict()  # mean time, in hours, taken to evacuate population-node, over all fires that contain the node within their perimeters
+  numPopulationNodesByFire = dict()  # number of positive-population population-nodes within fire's perimeter
+  numCriticalLinksByFire = dict()  # number of critical links within fire's perimeter
+  numEvacuationsLinkIsCriticalTo = dict()
+  # Read fire-raster input-layers:
 ##  evacuationLayers = ('modelinputsMtAlexander_100a/sem/20181109_mountalex_evac_ffdi100a_grid.tif', )  # just one fire, for simplicity
 ##  evacuationLayers = ('modelinputsMtAlexander_100a/sem/20181109_mountalex_evac_ffdi100a_grid.tif', 'modelinputsMtAlexander_100b/sem/20181109_mountalex_evac_ffdi100b_grid.tif')
 ##  for evacuationLayer in evacuationLayers:
-#  evacuationScenarios = ('a', 'b', 'c', 'd')  # fires ffdi100a, ffdi100b, ...
-  evacuationScenarios = ('a', )  # the single fire ffdi100a
+  evacuationScenarios = ('a', 'b', 'c', 'd')  # fires ffdi100a, ffdi100b, ...
+#  evacuationScenarios = ('a', )  # the single fire ffdi100a
   for fireName in evacuationScenarios:
     evacuationLayer = f'modelinputsMtAlexander_100{fireName}/sem/20181109_mountalex_evac_ffdi100{fireName}_grid.tif'
     print(f"Reading currentFire data from {evacuationLayer}...")
@@ -277,8 +280,8 @@ def findRisks(cfgJson):
 #    perimeterBounds = contourOfInitialFireExtent.getBounds()
 #    print(f"perimeterBounds[0] is {repr(perimeterBounds[0])}")  # returns nothing useful
 ##    bb = BoundingBox.from_list([[0.5, 0.5], [0.5, 0.5]])  # create search-point
-##    nearestNodes = network.nearest(bb)  # find node nearest to epicentre
-#    nearestNodes = network.nearest(perimeterBounds)  # find node nearest to epicentre
+##    nearestNodes = roadNetwork.nearest(bb)  # find node nearest to epicentre
+#    nearestNodes = roadNetwork.nearest(perimeterBounds)  # find node nearest to epicentre
 #    nearestNodeIndices = nearestNodes.getPointIndexes()  # indices of all nodes that are nearest to epicentre (there may be more than one)
 #    print(f"Fire epicentre has len(nearestNodeIndices)={len(nearestNodeIndices)}")
 #    print(f"nearestNodeIndices is {list(nearestNodeIndices)}")
@@ -322,9 +325,9 @@ def findRisks(cfgJson):
 #      exitnodes = {'316917533'}  # for now, selected by hand using QGIS, from the band lying between one and two kilometres from the fire's maximum-extent perimeter
 
 
-    fire_max_time = np.nanmax(currentFire.data)  # time that defines perimeter of currentFire's maximum extent
-#    print(f"Running for time (fire-duration) {fire_max_time}...")
-    print(f"fire_max_time is {fire_max_time}")
+#    fire_max_time = np.nanmax(currentFire.data)  # time that defines perimeter of currentFire's maximum extent
+##    print(f"Running for time (fire-duration) {fire_max_time}...")
+#    print(f"fire_max_time is {fire_max_time}")
 
 #    # Create inflowPerNodeInsidePerimeter layer:
 ##    print("Creating 'inflowPerNodeInsidePerimeter' layer ...")
@@ -341,9 +344,12 @@ def findRisks(cfgJson):
 #    isInsideFirePerimeter.init_with_bbox(allFires_bounds, CELLSIZESMALL_m)
     isInsideFirePerimeter.init_with_bbox(allFires_bounds, CELLSIZELARGE_m)
     isInsideFirePerimeter.setProjectionParameters(allFires_proj)
-    currentFire.setVariableData("fireMaxTime", fire_max_time)  # set fireMaxTime in 'currentFire' layer
-    runScript("isInsideFirePerimeter = currentFire < currentFire::fireMaxTime ? 1 : 0;", [isInsideFirePerimeter, currentFire])
+#    currentFire.setVariableData("fireMaxTime", fire_max_time)  # set fireMaxTime in 'currentFire' layer
+#    runScript("isInsideFirePerimeter = currentFire < currentFire::fireMaxTime ? 1 : 0;", [isInsideFirePerimeter, currentFire])
+    runScript("isInsideFirePerimeter = currentFire > 0 ? 1 : 0;", [isInsideFirePerimeter, currentFire])
     isInsideFirePerimeter.write(pth.join(outputDir, f"isInsideFirePerimeter_{int(CELLSIZELARGE_m)}_ffdi100{fireName}.tif"))  # write raster 'isInsideFirePerimeter' to a file
+
+#    sys.exit()
 
 #    print("Creating 'maxlinkcapacity_unaligned' layer ...")  # get maximum link-capacity within each cell
 ###    maxlinkcapacity_unaligned = Raster(name="maxlinkcapacity_unaligned")
@@ -353,18 +359,18 @@ def findRisks(cfgJson):
 ##    maxlinkcapacity_unaligned.setAllCellValues(0)
 #    # James Hilton, 17th June 2021:
 #    # > The atomic_max function only works for integers in OpenCL (I have no idea why). If it did work I think you could just do: r.rasterise(v, "atomic_max(capacity);") where r is your count raster, v the vector and capacity the field name. For this capacity would have to be an integer. I was thinking you could do this with a vector script but I think the same issue will occur.
-##    maxlinkcapacity_unaligned.rasterise(network, "atomic_max('capacity');", GeometryType.LineString)  # find maximum link-capacity within each cell; doesn't work, for some reason, and runs even if 'capacity' is replaced with a typo such as 'cpacity'
-#    # 'network' vector has much wider bounds than 'numFiresInside', so clip 'network' to the right size:
-#    network = network.region(allFires_bounds)  # clip network again, but to allFires_bounds, which are now in the same projection; this makes the bounds similar to those in allFires_bounds, so that rasterising the network to create maxlinkcapacity_unaligned will give the raster-layer suitable bounds
-#    networkBounds3 = network.getBounds()
-#    print(f"network.getBounds() after clipping to network.region(allFires_bounds) is {networkBounds3}")
-##    maxlinkcapacity_unaligned = network.rasterise(CELLSIZELARGE_m, "output = max(output, capacity);", GeometryType.LineString)  # create raster containing maximum link-capacity within each cell: gives different cell-values each time it's run
-##    maxlinkcapacity_unaligned = network.rasterise(CELLSIZELARGE_m, "output = max(output, capacity);")  # create raster containing maximum link-capacity within each cell: gives different cell-values each time it's run
-##    maxlinkcapacity_unaligned = network.rasterise(CELLSIZELARGE_m, "output = max(capacity, output);", 2)  # create raster containing maximum link-capacity within each cell: gives different cell-values each time it's run
-##    maxlinkcapacity_unaligned = network.rasterise(CELLSIZELARGE_m, "output = min(5000, capacity);", GeometryType.LineString)  # gives different cell-values each time it's run
-##    maxlinkcapacity_unaligned = network.rasterise(CELLSIZELARGE_m, "output = max(0, capacity);", GeometryType.LineString)  # create raster containing maximum link-capacity within each cell: gives different cell-values each time it's run; this line doesn't seem to work unless the raster-cell size is small (it works certainly for a cell-size between 80 and 640)
-#    maxlinkcapacity_unaligned = network.rasterise(80, "output = max(0, capacity);", GeometryType.LineString)  # create raster containing maximum link-capacity within each cell: this works, at its fine-grained scale of 80
-##    maxlinkcapacity_unaligned = network.rasterise(640, "output = max(0, capacity);", GeometryType.LineString)  # create raster containing maximum link-capacity within each cell; as the scale is increased this line works less well: the higher-capacity links get "overwritten" by lower-capacity ones
+##    maxlinkcapacity_unaligned.rasterise(roadNetwork, "atomic_max('capacity');", GeometryType.LineString)  # find maximum link-capacity within each cell; doesn't work, for some reason, and runs even if 'capacity' is replaced with a typo such as 'cpacity'
+#    # 'roadNetwork' vector has much wider bounds than 'numFiresInside', so clip 'roadNetwork' to the right size:
+#    roadNetwork = roadNetwork.region(allFires_bounds)  # clip roadNetwork again, but to allFires_bounds, which are now in the same projection; this makes the bounds similar to those in allFires_bounds, so that rasterising the roadNetwork to create maxlinkcapacity_unaligned will give the raster-layer suitable bounds
+#    networkBounds3 = roadNetwork.getBounds()
+#    print(f"roadNetwork.getBounds() after clipping to roadNetwork.region(allFires_bounds) is {networkBounds3}")
+##    maxlinkcapacity_unaligned = roadNetwork.rasterise(CELLSIZELARGE_m, "output = max(output, capacity);", GeometryType.LineString)  # create raster containing maximum link-capacity within each cell: gives different cell-values each time it's run
+##    maxlinkcapacity_unaligned = roadNetwork.rasterise(CELLSIZELARGE_m, "output = max(output, capacity);")  # create raster containing maximum link-capacity within each cell: gives different cell-values each time it's run
+##    maxlinkcapacity_unaligned = roadNetwork.rasterise(CELLSIZELARGE_m, "output = max(capacity, output);", 2)  # create raster containing maximum link-capacity within each cell: gives different cell-values each time it's run
+##    maxlinkcapacity_unaligned = roadNetwork.rasterise(CELLSIZELARGE_m, "output = min(5000, capacity);", GeometryType.LineString)  # gives different cell-values each time it's run
+##    maxlinkcapacity_unaligned = roadNetwork.rasterise(CELLSIZELARGE_m, "output = max(0, capacity);", GeometryType.LineString)  # create raster containing maximum link-capacity within each cell: gives different cell-values each time it's run; this line doesn't seem to work unless the raster-cell size is small (it works certainly for a cell-size between 80 and 640)
+#    maxlinkcapacity_unaligned = roadNetwork.rasterise(80, "output = max(0, capacity);", GeometryType.LineString)  # create raster containing maximum link-capacity within each cell: this works, at its fine-grained scale of 80
+##    maxlinkcapacity_unaligned = roadNetwork.rasterise(640, "output = max(0, capacity);", GeometryType.LineString)  # create raster containing maximum link-capacity within each cell; as the scale is increased this line works less well: the higher-capacity links get "overwritten" by lower-capacity ones
 #    maxlinkcapacity_unaligned.write(pth.join(outputDir, f"maxlinkcapacity_unaligned_{int(CELLSIZELARGE_m)}.tif"))
 #    # TODO: 'maxlinkcapacity_unaligned' raster has different dimensions from, and is not aligned with, 'numFiresInside'; must find a way to align it with 'numFiresInside'
 #    maxlinkcapacity_unaligned.name = 'maxlinkcapacity_unaligned'
@@ -398,9 +404,10 @@ def findRisks(cfgJson):
     runScript("populationIsInsideFire = population > 0 ? isInsideFirePerimeter : -1;", [populationIsInsideFire, population, isInsideFirePerimeter])  # -1 indicates population is zero in that raster-cell, and therefore no population-node need be found within that cell for the population to snap to; populationIsInsideFire is 'nan' where population > 0 and isInsideFirePerimeter is 'nan'
     populationIsInsideFire.write(pth.join(outputDir, f"populationIsInsideFire_{int(CELLSIZELARGE_m)}_ffdi100{fireName}.tif"))  # write raster 'populationIsInsideFire' to a file
 
-    # Define the injection-nodes, at most one per raster-cell that has positive population, as lying within currentFire's perimeter and being, for each qualifying raster-cell, the road-network node, if any, that has the largest maximum out-capacity:
+    # Define the injection-nodes: there is at most one in each raster-cell that both has positive population and lies within currentFire's perimeter: for each such raster-cell, the injection-node is the road-network node, if any, that has the largest maximum out-capacity:
+    # We make the assumption that every network-node having the largest maximum out-capacity is equally suitable as an injection-node; in reality this is not always true, for example in the case of a highway - a highway has nearby nodes on links that go in opposite directions, which means a cell's population might "snap to" the highway node that takes traffic in the wrong direction, away from the exit-nodes, and so will have to double back.
     print("######## Defining the injection-nodes ...")
-##    network.addProperty("numFirePerimetersInside")
+##    roadNetwork.addProperty("numFirePerimetersInside")
 #    dims = numFiresPopulationIsInside.getDimensions()
 #    print(f"numFiresPopulationIsInside dimensions is {dims}")
     dims = populationIsInsideFire.getDimensions()
@@ -424,7 +431,7 @@ def findRisks(cfgJson):
           print(f"j {j}, i {i}, populationIsInsideFire[{j},{i}] {populationIsInsideFire[j,i]}")  # values are 0, 1, 2
           b = BoundingBox.from_list([ [dims.ox+dims.hx*i, dims.oy+dims.hy*j], [dims.ox+dims.hx*(i+1), dims.oy+dims.hy*(j+1)] ])  # create search box for this cell
 #          b = BoundingBox.from_list([ [dims.oy+dims.hy*j, dims.ox+dims.hx*i], [dims.oy+dims.hy*(j+1), dims.ox+dims.hx*(i+1)] ])  # create search box for this cell
-          network_currentCell = network.region(b)  # find geometry within bounding-box
+          network_currentCell = roadNetwork.region(b)  # find geometry within bounding-box
 ##          maxlinkcapacity_currentCell = maxlinkcapacity.currentCell(b)  # find raster within bounding-box: doesn't work, because (so far) maxlinkcapacity raster has incorrect values to begin with
 #          maxlinkcapacity_currentCell = network_currentCell.rasterise(80, "output = max(0, capacity);", GeometryType.LineString)  # create finer-grained raster containing within each cell the maximum link-capacity: this works
           maxlinkcapacity_currentCell = network_currentCell.rasterise(CELLSIZEFINE_m, "output = max(0, capacity);", GeometryType.LineString)  # create finer-grained raster containing within each cell the maximum link-capacity: this works
@@ -486,7 +493,7 @@ def findRisks(cfgJson):
     print(f"len(inflowsByNodeID) is {len(inflowsByNodeID)}")
     print(f"positivePopulationInsideFireByNodeID is {positivePopulationInsideFireByNodeID}")
     with open(pth.join(outputDir, f"networkWithPropertiesByCell_{int(CELLSIZELARGE_m)}_ffdi100{fireName}.geojson"), "w") as f:
-      f.write(vectorToGeoJson(network))
+      f.write(vectorToGeoJson(roadNetwork))
     elapsedTime = time()
     print(f"findEvacuationRisks.py has run for {elapsedTime - startTime} seconds so far.")
 #    sys.exit()
@@ -505,8 +512,12 @@ def findRisks(cfgJson):
     dist = contourVector.mapDistance(resolution=180.0, geom_type=GeometryType.LineString, bounds=allFires_bounds)
     dist.name = 'dist'
     dist.setProjectionParameters(allFires_proj)
-    runScript('dist = currentFire < currentFire::fireMaxTime ? -dist : dist;', [dist, currentFire] )  # ensure 'dist' is a signed-distance raster, where points inside the fire perimeter have a negative distance: this is needed so that exit-nodes will be selected only from the nodes that lie outside the perimeter and not inside it
+#    runScript('dist = currentFire < currentFire::fireMaxTime ? -dist : dist;', [dist, currentFire] )
+    runScript('dist = currentFire > 0 ? -dist : dist;', [dist, currentFire] )  # ensure 'dist' is a signed-distance raster, where points inside the fire perimeter have a negative distance: this is needed so that exit-nodes will be selected only from the nodes that lie outside the perimeter and not inside it
 #    dist.write(pth.join(outputDir, f"dist_{int(fire_max_time):06d}.tif"))  # write raster-layer 'dist' to a file
+    dist.write(pth.join(outputDir, f"dist_{int(CELLSIZELARGE_m)}_ffdi100{fireName}.tif"))  # write raster-layer 'dist' to a file
+
+#    sys.exit()
 
 #    # Create count layer:
 #    print("Creating 'count' layer ...")
@@ -516,7 +527,7 @@ def findRisks(cfgJson):
 #    count.setProjectionParameters(allFires_proj)
 #    # Count points in cell:
 #    count.setAllCellValues(0)
-#    count.rasterise(network, "atomic_inc();", GeometryType.Point)  # atomic_inc() increments the value in any cell containing vector-nodes from 'network' layer
+#    count.rasterise(roadNetwork, "atomic_inc();", GeometryType.Point)  # atomic_inc() increments the value in any cell containing vector-nodes from 'roadNetwork' layer
 ##    runScript('count = count == 0 ? nodata : count;', [count] )  # set each cell containing no vector-nodes to 'nodata'
 #    runScript('count = count < 1 ? nodata : count;', [count] )  # set each cell containing no vector-nodes to 'nodata'
 #    count.write(pth.join(outputDir, f"count_{int(fire_max_time):06d}.tif"))
@@ -574,7 +585,7 @@ def findRisks(cfgJson):
         if atSafeDistFromPerimeter[j,i] == 1:  # 0 indicates the raster-cell is outside the "safe" buffer, in which case no exit-node need be found within that cell
           print(f"j {j}, i {i}, atSafeDistFromPerimeter[{j},{i}] {atSafeDistFromPerimeter[j,i]}")  # values are 0, 1
           b = BoundingBox.from_list([ [dims.ox+dims.hx*i, dims.oy+dims.hy*j], [dims.ox+dims.hx*(i+1), dims.oy+dims.hy*(j+1)] ])  # create search box for this cell
-          network_currentCell = network.region(b)  # find geometry within bounding-box
+          network_currentCell = roadNetwork.region(b)  # find geometry within bounding-box
           print(f"len(network_currentCell.getPointIndexes()) is {len(network_currentCell.getPointIndexes())}")
           print(f"len(network_currentCell.getLineStringIndexes()) is {len(network_currentCell.getLineStringIndexes())}")
 #          largestMaxInCapacityFound_cell = None  # will record, over all nodes/Points in the raster-cell, the node's maximum in-capacity that is the largest
@@ -629,8 +640,8 @@ def findRisks(cfgJson):
     exitNodesAtSafeDistfilename = pth.join(outputDir, f"exitNodesAtSafeDist_{int(CELLSIZELARGE_m)}_ffdi100{fireName}.geojson")
 #    with open(pth.join(outputDir, f"exitNodesAtSafeDist_{int(CELLSIZELARGE_m)}.geojson"), "w") as f:
     with open(exitNodesAtSafeDistfilename, "w") as f:
-      f.write(vectorToGeoJson(network))
-#    networkBounds_clippedToAllFires = network.getBounds()  # is in wrong projection
+      f.write(vectorToGeoJson(roadNetwork))
+#    networkBounds_clippedToAllFires = roadNetwork.getBounds()  # is in wrong projection
 #    print(f"networkBounds_clippedToAllFires is {networkBounds_clippedToAllFires}")
     print(f"networkBounds1 is {networkBounds1}")
 
@@ -639,13 +650,13 @@ def findRisks(cfgJson):
 #    sys.exit()  # for debugging, exit before running SEM
 
 #    # Map population per node to network-node inflow:
-##    network.pointSample(inflowPerNodeInsidePerimeter)  # sample 'inflowPerNodeInsidePerimeter' raster at each point and write resulting value to the 'network' vector-layer
+##    roadNetwork.pointSample(inflowPerNodeInsidePerimeter)  # sample 'inflowPerNodeInsidePerimeter' raster at each point and write resulting value to the 'roadNetwork' vector-layer
 #    # Map whether sufficiently far from currentFire's perimeter to network-node safety:
-#    network.pointSample(atSafeDistFromPerimeter)  # sample 'atSafeDistFromPerimeter' raster at each point and write resulting value to the 'network' vector-layer
+#    roadNetwork.pointSample(atSafeDistFromPerimeter)  # sample 'atSafeDistFromPerimeter' raster at each point and write resulting value to the 'roadNetwork' vector-layer
 ###    with open(pth.join(outputDir, f"networkNodesAtSafeDist_{int(fire_max_time):06d}.geojson"), "w") as networkfile:
 ##    with open(pth.join(outputDir, f"networkNodesAtSafeDist_{int(CELLSIZELARGE_m)}_ffdi100{fireName}.geojson"), "w") as networkfile:
 #    with open(pth.join(outputDir, f"networkNodesAtSafeDist_ffdi100{fireName}.geojson"), "w") as networkfile:
-#      networkfile.write(vectorToGeoJson(network))
+#      networkfile.write(vectorToGeoJson(roadNetwork))
 
 
     # Run flow-solver:
@@ -661,14 +672,14 @@ def findRisks(cfgJson):
     print(f"JSONnetworkfilename is {JSONnetworkfilename}")
 #    SEMoutputGeoJSON = solversSEMversions.runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperiodsByNodeID, exitnodes, subflowsToAssignedExitNodesByInjectionNodeID, simulDurationInHours)
     print(f"exitNodesAtSafeDistfilename is {exitNodesAtSafeDistfilename}")
-#    (SEMoutputGeoJSON, criticalLinks) = solversSEMversions.runSEM( SEMversion, exitNodesAtSafeDistfilename, inflowsByNodeID, inflowsandflowperiodsByNodeID, exitnodes, positivePopulationInsideFireByNodeID, subflowsToAssignedExitNodesByInjectionNodeID, simulDurationInHours)  # run SEM version on the network as clipped to 'allFires' bounds
+#    (SEMoutputGeoJSON, criticalLinks) = solversSEMversions.runSEM( SEMversion, exitNodesAtSafeDistfilename, inflowsByNodeID, inflowsandflowperiodsByNodeID, exitnodes, positivePopulationInsideFireByNodeID, subflowsToAssignedExitNodesByInjectionNodeID, simulDurationInHours)  # run SEM version on the roadNetwork as clipped to 'allFires' bounds
     currentFireBounds = currentFire.getBounds()
     print(f"currentFireBounds is {currentFireBounds}.")
-    currentFireBounds = currentFireBounds.convert(network_proj, allFires_proj)  # convert currentFireBounds to the network projection
-    print(f"currentFireBounds converted to network projection is {currentFireBounds}.")
-    (maxFlowSolnGeoJSON, criticalLinksInsideFireBoundingBox) = solversSEMversions.runSEM( SEMversion, exitNodesAtSafeDistfilename, inflowsByNodeID, inflowsandflowperiodsByNodeID, exitnodes, positivePopulationInsideFireByNodeID, currentFireBounds, subflowsToAssignedExitNodesByInjectionNodeID, simulDurationInHours)  # run SEM version on the network as clipped to 'allFires' bounds
+    currentFireBounds = currentFireBounds.convert(network_proj, allFires_proj)  # convert currentFireBounds to the roadNetwork projection
+    print(f"currentFireBounds converted to roadNetwork projection is {currentFireBounds}.")
+    (maxFlowSolnGeoJSON, criticalLinksInsideFireBoundingBox, evacuationTimeByNodeID) = solversSEMversions.runSEM( SEMversion, exitNodesAtSafeDistfilename, inflowsByNodeID, inflowsandflowperiodsByNodeID, exitnodes, positivePopulationInsideFireByNodeID, currentFireBounds, subflowsToAssignedExitNodesByInjectionNodeID, simulDurationInHours)  # run SEM version on the roadNetwork as clipped to 'allFires' bounds
 
-#    print(f"Reading network data from {maxFlowSolnGeoJSON} into a vector ...")
+#    print(f"Reading roadNetwork data from {maxFlowSolnGeoJSON} into a vector ...")
 #    network_maxFlowSoln = geoJsonToVector(maxFlowSolnGeoJSON)
 #    maxFlowSoln_proj = network_maxFlowSoln.getProjectionParameters()
 #    # Restrict network_maxFlowSoln's bounds to a smaller area around currentFire, then convert these bounds to the network_maxFlowSoln projection:
@@ -729,16 +740,29 @@ def findRisks(cfgJson):
 #      f.write(vectorToGeoJson(network_maxFlowSoln))
 
 
+    print(f"len(evacuationTimeByNodeID) is {len(evacuationTimeByNodeID)}")
+    for popNode in evacuationTimeByNodeID:
+      if popNode in meanTimeToEvacuateByPopulationNode:
+#        sumEvacuationTimesSoFar = meanTimeToEvacuateByPopulationNode[popNode]['sumEvacTimes']
+#        numFiresInsideSoFar = meanTimeToEvacuateByPopulationNode[popNode]['numFiresInside']
+        meanTimeToEvacuateByPopulationNode[popNode]['sumEvacTimes'] += evacuationTimeByNodeID[ popNode ]
+        meanTimeToEvacuateByPopulationNode[popNode]['numFiresInside'] += 1
+      else:
+        meanTimeToEvacuateByPopulationNode[popNode] = dict()
+        meanTimeToEvacuateByPopulationNode[popNode]['sumEvacTimes'] = evacuationTimeByNodeID[ popNode ]
+        meanTimeToEvacuateByPopulationNode[popNode]['numFiresInside'] = 1
+    print(f"len(positivePopulationInsideFireByNodeID) is {len(positivePopulationInsideFireByNodeID)}")
+    numPopulationNodesByFire[ fireName ] = len(positivePopulationInsideFireByNodeID)
 ##    print(f"criticalLinks is {criticalLinks}")
 ##    print(f"len(criticalLinks) is {len(criticalLinks)}")
 #    print(f"criticalLinksInsideFireBoundingBox is {criticalLinksInsideFireBoundingBox}")
     print(f"len(criticalLinksInsideFireBoundingBox) is {len(criticalLinksInsideFireBoundingBox)}")
     numCriticalLinksByFire[ fireName ] = len(criticalLinksInsideFireBoundingBox)
     for link in criticalLinksInsideFireBoundingBox:
-      if link in numFiresLinkIsCriticalTo:
-        numFiresLinkIsCriticalTo[ link ] += 1
+      if link in numEvacuationsLinkIsCriticalTo:
+        numEvacuationsLinkIsCriticalTo[ link ] += 1
       else:
-        numFiresLinkIsCriticalTo[ link ] = 1
+        numEvacuationsLinkIsCriticalTo[ link ] = 1
 
 
     # Write data:
@@ -756,10 +780,67 @@ def findRisks(cfgJson):
       json.dump(maxFlowSolnGeoJSON, outfile)
 
 
+  MAXEVACTIME_FINITE = 100.0  # (in hours) maximum time that any population-node should take to evacuate if it isn't infinite
+  for popNode in meanTimeToEvacuateByPopulationNode:
+    meanTimeToEvacuateByPopulationNode[popNode]['meanTimeToEvacuate'] = meanTimeToEvacuateByPopulationNode[popNode]['sumEvacTimes'] / meanTimeToEvacuateByPopulationNode[popNode]['numFiresInside']
+    if meanTimeToEvacuateByPopulationNode[popNode]['meanTimeToEvacuate'] > MAXEVACTIME_FINITE:
+      meanTimeToEvacuateByPopulationNode[popNode]['meanTimeToEvacuate'] = MAXEVACTIME_FINITE
+  print(f"meanTimeToEvacuateByPopulationNode is {meanTimeToEvacuateByPopulationNode}")
+  print(f"numPopulationNodesByFire is {numPopulationNodesByFire}")
   print(f"numCriticalLinksByFire is {numCriticalLinksByFire}")
-#  print(f"numFiresLinkIsCriticalTo is {numFiresLinkIsCriticalTo}")
+  print(f"numEvacuationsLinkIsCriticalTo is {numEvacuationsLinkIsCriticalTo}")
+  print(f"len(numEvacuationsLinkIsCriticalTo) is {len(numEvacuationsLinkIsCriticalTo)}")
 
-#  numFiresInside.write(pth.join(outputDir, f"numFiresInside_{int(fire_max_time):06d}.tif"))  # write raster-layer 'numFiresInside' to a file
+
+  print("Creating 'ignitionRisk' layer ...")  # to record the ignition-risk of each raster-cell, i.e. the total number of population-nodes within all fires the cell is inside plus the total number of critical links for all fires whose perimeters the cell is inside
+  ignitionRisk = Raster(name="ignitionRisk")
+  ignitionRisk.init_with_bbox(allFires_bounds, CELLSIZELARGE_m)
+  ignitionRisk.setProjectionParameters(allFires_proj)
+  ignitionRisk.setAllCellValues(0)
+  # Read all fire-layers to create 'ignitionRisk' layer:
+  allFireNames = ('a', 'b', 'c', 'd')  # fires ffdi100a, ffdi100b, ...
+  for fireName in allFireNames:
+    evacuationLayer = f'modelinputsMtAlexander_100{fireName}/sem/20181109_mountalex_evac_ffdi100{fireName}_grid.tif'
+    print(f"Reading fire data from {evacuationLayer}...")
+    if pth.splitext(evacuationLayer)[-1].lower() in ['.tif', '.asc', '.gsr', '.flt']:  # use native raster-readers:
+      currentFire = Raster(name=f"currentFire")
+      currentFire.read(evacuationLayer)
+    else:  # use gdal based raster reader:
+      currentFire = RasterFile(name = f"currentFire", filePath = evacuationLayer, backend = 'gdal')
+      currentFire.read()
+    currentFire.setVariableData("ignitionRisk", numPopulationNodesByFire[fireName] + numCriticalLinksByFire[fireName])
+#    runScript('numFiresInside += currentFire < currentFire::fireMaxTime ? 1 : 0;', [numFiresInside, currentFire] )  # add 1 to value of cell if inside the fire-perimeter, 0 otherwise
+    runScript('ignitionRisk += currentFire > 0 ? currentFire::ignitionRisk : 0;', [ignitionRisk, currentFire] )  # add 1 to value of cell if inside the fire-perimeter, 0 otherwise
+#  dims = ignitionRisk.getDimensions()
+#  print(f"ignitionRisk dimensions is {dims}")
+  ignitionRisk.write(pth.join(outputDir, f"ignitionRisk_{int(CELLSIZELARGE_m)}.tif"))  # write raster-layer 'ignitionRisk' to a file
+
+
+#  print("Creating 'pointOfImpactRisk' layer ...")
+  print("Creating 'roadNetworkWithRiskProperties' layer ...")  # to record the point-of-impact risk for each road-link, i.e. the number of evacuation-flows the link is critical to, as well as the community risk for each population-node, i.e. the mean time taken to evacuate each node over all fires that contain it
+  numLinksProcessed = 0
+  for idLS in roadNetwork.getLineStringIndexes():
+    MATsimID_link = roadNetwork.getProperty( idLS, 'matsim_linkID' )
+    if MATsimID_link in numEvacuationsLinkIsCriticalTo:
+#      print(f"idLS {idLS}, MATsimID_link {MATsimID_link}")
+      roadNetwork.setProperty(idLS, "numEvacsLinkCriticalTo", numEvacuationsLinkIsCriticalTo[MATsimID_link])
+      numLinksProcessed += 1
+      if numLinksProcessed % 100 == 0:
+        print(f"numLinksProcessed is {numLinksProcessed}")
+    else:
+#      print(f"idLS {idLS}: MATsimID_link {MATsimID_link} NOT in numEvacuationsLinkIsCriticalTo.")
+      pass
+#    roadNetwork.setProperty(idLS, "numEvacsLinkCriticalTo", numEvacuationsLinkIsCriticalTo.get(MATsimID_link,0))
+
+  for idx in roadNetwork.getPointIndexes():
+    MATsimID_node = roadNetwork.getProperty( idx, 'matsim_nodeID' )
+    if MATsimID_node in meanTimeToEvacuateByPopulationNode:
+      roadNetwork.setProperty(idx, "meanTimeToEvacuate", meanTimeToEvacuateByPopulationNode[MATsimID_node]['meanTimeToEvacuate'])
+
+  with open(pth.join(outputDir, f"roadNetworkWithRiskProperties_{int(CELLSIZELARGE_m)}_allFires.geojson"), "w") as f:
+    f.write(vectorToGeoJson(roadNetwork))
+
+
   endTime = time()
   print(f"findEvacuationRisks.py ran for {endTime - startTime} seconds in total.")
   return 0

@@ -2976,9 +2976,11 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointN
       Gmaximumflow.edges[u,v]['capacity'] = argsflowfunc['linkcapacity'][frozenset({u,v})]
 #      print(f"Gmaximumflow.edges[{u},{v}]['capacity'] is {Gmaximumflow.edges[u,v]['capacity']}")
 
-#  print("Gmaximumflow.nodes() is %s" % Gmaximumflow.nodes())
-#  print("Gmaximumflow.edges() is %s" % Gmaximumflow.edges())
-  nodeID_possiblebug = '728021001'  # for debugging: this node appears to violate the flow-conservation constraint
+##  print("Gmaximumflow.nodes() is %s" % Gmaximumflow.nodes())
+##  print("Gmaximumflow.edges() is %s" % Gmaximumflow.edges())
+#  nodeID_possiblebug = '728021001'  # for debugging: this node appears to violate the flow-conservation constraint
+#  nodeID_possiblebug = '259608426'  # for debugging: has inflow of 4000
+  nodeID_possiblebug = '259608572'  # for debugging: has inflow of 0
   REPLACEANTIPARALLELARCS = False
 #  REPLACEANTIPARALLELARCS = True
   if REPLACEANTIPARALLELARCS:
@@ -3239,7 +3241,7 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointN
 #def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperiodsByNodeID, exitnodes, simulDuration=14/3600):
 def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperiodsByNodeID, exitnodes, positivePopulationInsideFireByNodeID, fireBounds, subflowsToAssignedExitNodesByInjectionNodeID, simulDuration=1.0):  # SEM4 specifies a duration (in hours) for the simulated propagation of wave- and shock-fronts
   starttime = time.time()
-  print("inflowsByNodeID is", inflowsByNodeID)
+#  print("inflowsByNodeID is", inflowsByNodeID)
   print(f"subflowsToAssignedExitNodesByInjectionNodeID is {subflowsToAssignedExitNodesByInjectionNodeID}")
   exception = None  # this will change if the global-optimisation solver is employed and it raises an exception such as numpy.linalg.LinAlgError
 ##  (terminatorPressure, eps, eps_flowbalance, flowfunc, flowijfunc, derivijfunc, adjacency, N, exitnodes, injectionnodes, indexamonginjectionorexitnodes, neighboursThatCanFlowIntoj, hExitNodes, totalinflow, argsflowfunc, lK, linklength, v0, pointcoordsbyID) = setuptrafficflowproblem( JSONnetworkfilename, b0 )
@@ -3719,7 +3721,10 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
 #          if fireBounds.bbox_contains_coordinate:
           if BoundingBox.boundingBoxContains(fireBounds, BoundingBox([[w,s],[e,n]])):
             linkJSON["properties"]["isCritical"] = 1
-            criticalLinksInsideFireBoundingBox.append( (nodeIDa,nodeIDb) )
+#            criticalLinksInsideFireBoundingBox.append( (nodeIDa,nodeIDb) )
+#        linestringsWithCoords[key]['matsim_linkID']
+#    linkproperties['matsim_linkID']
+            criticalLinksInsideFireBoundingBox.append( linkproperties['matsim_linkID'] )
 #            print("Link is inside fireBounds.")
           else:
             linkJSON["properties"]["isCritical"] = 0
@@ -4098,7 +4103,7 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
     plt.show()
 
 #  return outputGeoJSON, criticalLinks
-  return outputGeoJSON, criticalLinksInsideFireBoundingBox
+  return outputGeoJSON, criticalLinksInsideFireBoundingBox, evacuationTimeByNodeID
 
 
 #############################################################################
