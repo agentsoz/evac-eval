@@ -182,16 +182,17 @@ def main(scenario, outdir):
 #  print(f"root is {root}")
   print("Parsing network nodes into a vector ...")
   nodes = dict()
-  pointIdxByNodeID = dict()
+  pointIDxByNodeID = dict()
   vec = vector.Vector()
   for elem in root.iter('node'):
     c = vector.Coordinate(float(elem.attrib['x']), float(elem.attrib['y']))
-    pointIdx = vec.addPoint(c)
-#    print(f"pointIdx is {pointIdx}, nodeID is {elem.attrib['id']}")
-    vec.setProperty(pointIdx, "matsim_nodeID", elem.attrib['id'])
+    pointIDx = vec.addPoint(c)
+#    print(f"pointIDx is {pointIDx}, nodeID is {elem.attrib['id']}")
+    vec.setProperty(pointIDx, "pointID", pointIDx)  # needed for mapping of matsim_nodeID to the vector's point-ID
+    vec.setProperty(pointIDx, "matsim_nodeID", elem.attrib['id'])
     nodes[elem.attrib['id']] = c[:2]  # record the mapping of node id to xy coords
-    pointIdxByNodeID[elem.attrib['id']] = pointIdx
-    vec.setProperty(pointIdx, "maxCapacityOut", -99.9)  # will record the maximum capacity of any link leaving this node, i.e. any link whose 'from' property equals this node's ID
+    pointIDxByNodeID[elem.attrib['id']] = pointIDx
+    vec.setProperty(pointIDx, "maxCapacityOut", -99.9)  # will record the maximum capacity of any link leaving this node, i.e. any link whose 'from' property equals this node's ID
   vec.setProjectionParameters(networkEpsg)
   input.close()
   outfile = networkOutfilePrefix + ".nodes.shp"
@@ -218,21 +219,22 @@ def main(scenario, outdir):
   # vec = vector.Vector()
   for elem in root.iter('link'):
     line = [nodes[elem.attrib['from']], nodes[elem.attrib['to']]]
-    lineIdx = vec.addLineString(line)
-#    vec.setProperty(lineIdx, "diameter", 1.0)  # (of very low priority, as the monotonic-flow version SEM1 is not useful): "diameter" applies only to the monotonic-flow version of SEM, but for that version it shouldn't always be 1.0
-    vec.setProperty(lineIdx, "matsim_linkID", elem.attrib['id'])
+    lineIDx = vec.addLineString(line)
+    vec.setProperty(lineIDx, "lineStringID", lineIDx)  # needed for mapping of matsim_linkID to the vector's lineString-ID
+#    vec.setProperty(lineIDx, "diameter", 1.0)  # (of very low priority, as the monotonic-flow version SEM1 is not useful): "diameter" applies only to the monotonic-flow version of SEM, and even for that version it shouldn't always be 1.0
+    vec.setProperty(lineIDx, "matsim_linkID", elem.attrib['id'])
     # For every version of SEM with non-monotonic flow, need capacity, free speed, number of lanes, length of each link, and whether the link is one-way:
 ##    print(f"elem.attrib['capacity'] is {repr(elem.attrib['capacity'])}")
-#    vec.setProperty(lineIdx, "capacity", elem.attrib['capacity'])
-    vec.setProperty(lineIdx, "capacity", float(elem.attrib['capacity']))  # must convert capacity-value from string to float, so that findEvacuationRisks.py can calculate 'maxlinkcapacity' raster, in line 'maxlinkcapacity = network.rasterise(rasterCellSize_large, "output = max(output, capacity);", GeometryType.LineString)' - TODO: in fact the float() here results in integer-valued capacities being saved to the vector-property "capacity", which is Geostack behaviour and probably won't cause problems but is unexpected
-    vec.setProperty(lineIdx, "freespeed", elem.attrib['freespeed'])
-    vec.setProperty(lineIdx, "permlanes", elem.attrib['permlanes'])
-#    vec.setProperty(lineIdx, "diameter", elem.attrib['permlanes'])
-    vec.setProperty(lineIdx, "length", elem.attrib['length'])
-    vec.setProperty(lineIdx, "oneway", elem.attrib['oneway'])  # might not need 'oneway' property
-    pointIdx = pointIdxByNodeID[ elem.attrib['from'] ]  # ASSUMPTION: every link in networkfile is one-way, i.e. every two-way link is specified as two one-way links; otherwise the 'from'-node is ill-defined
-    if float(elem.attrib['capacity']) > vec_nodes.getProperty(pointIdx, "maxCapacityOut", float):
-      vec_nodes.setProperty(pointIdx, "maxCapacityOut", float(elem.attrib['capacity']))
+#    vec.setProperty(lineIDx, "capacity", elem.attrib['capacity'])
+    vec.setProperty(lineIDx, "capacity", float(elem.attrib['capacity']))  # must convert capacity-value from string to float, so that findEvacuationRisks.py can calculate 'maxlinkcapacity' raster, in line 'maxlinkcapacity = network.rasterise(rasterCellSize_large, "output = max(output, capacity);", GeometryType.LineString)' - TODO: in fact the float() here results in integer-valued capacities being saved to the vector-property "capacity", which is Geostack behaviour and probably won't cause problems but is unexpected
+    vec.setProperty(lineIDx, "freespeed", elem.attrib['freespeed'])
+    vec.setProperty(lineIDx, "permlanes", elem.attrib['permlanes'])
+#    vec.setProperty(lineIDx, "diameter", elem.attrib['permlanes'])
+    vec.setProperty(lineIDx, "length", elem.attrib['length'])
+    vec.setProperty(lineIDx, "oneway", elem.attrib['oneway'])  # might not need 'oneway' property
+    pointIDx = pointIDxByNodeID[ elem.attrib['from'] ]  # ASSUMPTION: every link in networkfile is one-way, i.e. every two-way link is specified as two one-way links; otherwise the 'from'-node is ill-defined
+    if float(elem.attrib['capacity']) > vec_nodes.getProperty(pointIDx, "maxCapacityOut", float):
+      vec_nodes.setProperty(pointIDx, "maxCapacityOut", float(elem.attrib['capacity']))
 #      print(f"Setting 'maxCapacityOut' property of node with ID {elem.attrib['from']} to {float(elem.attrib['capacity'])}")
   timeToParseNetworkLinksToVector = time.time() - starttime_parseNetworkLinksToVector
   print(f"Parsing of network links from networkFile {networkFile} took {timeToParseNetworkLinksToVector:.2f} seconds.")
@@ -308,8 +310,8 @@ def main(scenario, outdir):
 #            coordsAlreadyAddedToNearestNodes.append(nodeCoordinates)
 #            nearestNode_ID = vec_nearestNodes.addPoint(nodeCoordinates)
 ##            print(f"nearestNode to c is {vec_nearestNodes.getPointCoordinate(nearestNode_ID).to_list()}")
-###            vec.setProperty(lineIdx, "oneway", elem.attrib['oneway'])
-###            vec.setProperty(pointIdx, "matsim_nodeID", elem.attrib['id'])
+###            vec.setProperty(lineIDx, "oneway", elem.attrib['oneway'])
+###            vec.setProperty(pointIDx, "matsim_nodeID", elem.attrib['id'])
 #            numHomes = vec_nearestNodes.getProperty(nearestNode_ID, "homesCount", int)
 #            numHomes += 1
 #            print(f"nearestNode_ID is {nearestNode_ID}")
@@ -348,8 +350,8 @@ def main(scenario, outdir):
           nodeIndicesAlreadyAddedToNearestNodes.append( nodeIndex )
 #          nearestNode_ID = vec_nearestNodes.addPoint(nodeCoordinates)
 #          print(f"nearestNode to c is {vec_nearestNodes.getPointCoordinate(nearestNode_ID).to_list()}")
-##          vec.setProperty(lineIdx, "oneway", elem.attrib['oneway'])
-##          vec.setProperty(pointIdx, "matsim_nodeID", elem.attrib['id'])
+##          vec.setProperty(lineIDx, "oneway", elem.attrib['oneway'])
+##          vec.setProperty(pointIDx, "matsim_nodeID", elem.attrib['id'])
           numHomes = 1
 #          vec_nearestNodes.setProperty(nearestNode_ID, "homesCount", numHomes)
           vec_nodes.setProperty(nodeIndex, "homesCount", numHomes)
@@ -431,8 +433,8 @@ def main(scenario, outdir):
     for act in root.iter('activity'):
       if (act.attrib['type'] == popnActivityFilter):
         c = vector.Coordinate(float(act.attrib['x']), float(act.attrib['y']))
-        pointIdx = vec.addPoint(c)
-        vec.setProperty(pointIdx, "newproperty", "newstr")
+        pointIDx = vec.addPoint(c)
+#        vec.setProperty(pointIDx, "newproperty", "newstr")
     vec.setProjectionParameters(popnEpsg)
     input.close()
     print("Rasterising the home activity locations vector ...")
@@ -454,7 +456,7 @@ if __name__ == "__main__":
   parser = ArgumentParser(description="script to convert vector and raster files using Geostack")
   parser.add_argument("--outdir", dest="outdir", type=str, help="path to the output directory - must include a forward slash ('/') after its name")
 #  parser.add_argument("--scenario", dest="scenario", type=str, default='Scenario not supplied', required=True, help="name of the scenario (choose from 'mount-alexander-shire' and 'loddon-mallee-northern-cluster-shires'")
-  parser.add_argument("--scenario", dest="scenario", type=str, required=True, help="name of the scenario (choose from 'Mount-Alexander-Shire_100d', 'Loddon-Mallee-Northern-Cluster-Shires', 'cmr_1s1d1r1k', 'cmr_3s2d3k', or 'cmr1full'")
+  parser.add_argument("--scenario", dest="scenario", type=str, required=True, help="name of the scenario (choose from 'Mount-Alexander-Shire_100[a-d]', 'Loddon-Mallee-Northern-Cluster-Shires', 'cmr_1s1d1r1k', 'cmr_3s2d3k', or 'cmr1full'")
   args = parser.parse_args()
 
 #  if args.outdir is None:

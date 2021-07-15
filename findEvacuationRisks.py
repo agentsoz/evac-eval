@@ -57,22 +57,22 @@ def findRisks(cfgJson):
     JSONnetworkfilename = getParam(cfgJson, "networkGeoJSON", (str,))
     outputGeoJSONfilename = getParam(cfgJson, "outputGeoJSON", (str,))
 #    networkConfig = getParam(cfgJson, "networkConfig", (dict,))
-    CELLSIZEFINE_m = getParam(cfgJson, "CELLSIZEFINE_m", (float,))
-#    CELLSIZESMALL_m = getParam(cfgJson, "CELLSIZESMALL_m", (float,))
-    CELLSIZELARGE_m = getParam(cfgJson, "CELLSIZELARGE_m", (float,))
-    INNERDIST_SAFEBUFFER_m = getParam(cfgJson, "INNERDIST_SAFEBUFFER_m", (float,))
-    OUTERDIST_SAFEBUFFER_m = getParam(cfgJson, "OUTERDIST_SAFEBUFFER_m", (float,))
+    FIRE_BOUNDS_EXTENSION_m = getParam(cfgJson, "FIRE_BOUNDS_EXTENSION_m", (float,))  # distance in metres by which the bounds of one fire-layer are extended in order to encompass all relevant fire-layers; TODO: find a better general method
+    print(f"FIRE_BOUNDS_EXTENSION_m is {FIRE_BOUNDS_EXTENSION_m} metres")
+    CELLSIZEFINE_m = getParam(cfgJson, "CELLSIZEFINE_m", (float,))  # in metres
+#    CELLSIZESMALL_m = getParam(cfgJson, "CELLSIZESMALL_m", (float,))  # in metres
+    CELLSIZELARGE_m = getParam(cfgJson, "CELLSIZELARGE_m", (float,))  # in metres
+    INNERDIST_SAFEBUFFER_m = getParam(cfgJson, "INNERDIST_SAFEBUFFER_m", (float,))  # distance in metres from fire-perimeter to inner boundary of the "safe" buffer in which exit-nodes might be placed
+    OUTERDIST_SAFEBUFFER_m = getParam(cfgJson, "OUTERDIST_SAFEBUFFER_m", (float,))  # distance in metres from fire-perimeter to outer boundary of the "safe" buffer in which exit-nodes might be placed
 
 #    CELLSIZEFINE_m = 80.0
 
-##    CELLSIZESMALL_m = 180.0
 #    CELLSIZESMALL_m = 100.0
 
 #    CELLSIZELARGE_m = 1000.0
-##    CELLSIZELARGE_m = 2000.0
 ##    CELLSIZELARGE_m = 10000.0
 #    print(f"CELLSIZEFINE_m is {CELLSIZEFINE_m}, CELLSIZESMALL_m is {CELLSIZESMALL_m}, CELLSIZELARGE_m is {CELLSIZELARGE_m}")
-    print(f"CELLSIZEFINE_m is {CELLSIZEFINE_m}, CELLSIZELARGE_m is {CELLSIZELARGE_m}")
+    print(f"CELLSIZEFINE_m is {CELLSIZEFINE_m} metres, CELLSIZELARGE_m is {CELLSIZELARGE_m} metres")
 
 #    rasterCellSize_small = CELLSIZESMALL_m
 #    rasterCellSize_large = CELLSIZELARGE_m
@@ -107,7 +107,7 @@ def findRisks(cfgJson):
   # Read just one fire-layer to obtain its projection, and extend its bounds to define bounds encompassing all fires:
 #  evacuationLayer = 'modelinputsMtAlexander_100a/sem/20181109_mountalex_evac_ffdi100a_grid.tif'
   evacuationLayer = 'modelinputsMtAlexander_100c/sem/20181109_mountalex_evac_ffdi100c_grid.tif'
-  print(f"Reading fire data from {evacuationLayer}...")
+  print(f"To obtain projection, reading fire data from {evacuationLayer}...")
   if pth.splitext(evacuationLayer)[-1].lower() in ['.tif', '.asc', '.gsr', '.flt']:  # use native raster-readers
     fire = Raster(name="fire")
     fire.read(evacuationLayer)
@@ -117,7 +117,8 @@ def findRisks(cfgJson):
   allFires_proj = fire.getProjectionParameters()
 #  print(f"allFires_proj is {allFires_proj}")
   allFires_bounds = fire.getBounds()
-  allFires_bounds.extend(20000.0)  # extend bounds of the fire layer by 20 km; TODO: the purpose of this extension is to cover all fires; in general, it might be necessary to calculate a union of the fire-rasters
+#  allFires_bounds.extend(20000.0)  # extend bounds of the fire layer by 20 km; TODO: the purpose of this extension is to cover all fires; in general, it might be better to calculate a union of the fire-rasters
+  allFires_bounds.extend(FIRE_BOUNDS_EXTENSION)  # extend bounds of the fire layer by 20 km; TODO: the purpose of this extension is to cover all fires; in general, it might be better to calculate a union of the fire-rasters
 
   # Read road-network vector-layer:
   print(f"Reading road-network data from {JSONnetworkfilename} ...")
@@ -245,7 +246,7 @@ def findRisks(cfgJson):
 #  evacuationScenarios = ('a', )  # the single fire ffdi100a
   for fireName in evacuationScenarios:
     evacuationLayer = f'modelinputsMtAlexander_100{fireName}/sem/20181109_mountalex_evac_ffdi100{fireName}_grid.tif'
-    print(f"Reading currentFire data from {evacuationLayer}...")
+    print(f"################# Reading currentFire data from {evacuationLayer}...")
     if pth.splitext(evacuationLayer)[-1].lower() in ['.tif', '.asc', '.gsr', '.flt']:
       # use native raster-readers:
       currentFire = Raster(name="currentFire")
@@ -428,14 +429,13 @@ def findRisks(cfgJson):
         if populationIsInsideFire[j,i] > 0:  # -1 indicates population is zero in that raster-cell, and 0 indicates the cell is not inside currentFire's perimeter; in either case, no population-node need be found within that cell for the population to snap to
 ##          print(f"i {i}, j {j}, numFiresPopulationIsInside[{i},{j}] {numFiresPopulationIsInside[i,j]}")  # values are 0, 1, 2
 #          print(f"j {j}, i {i}, numFiresPopulationIsInside[{j},{i}] {numFiresPopulationIsInside[j,i]}")  # values are 0, 1, 2
-          print(f"j {j}, i {i}, populationIsInsideFire[{j},{i}] {populationIsInsideFire[j,i]}")  # values are 0, 1, 2
+          print(f"j {j}, i {i}, populationIsInsideFire[{j},{i}] {populationIsInsideFire[j,i]}")  # values are -1, 0, 1
           b = BoundingBox.from_list([ [dims.ox+dims.hx*i, dims.oy+dims.hy*j], [dims.ox+dims.hx*(i+1), dims.oy+dims.hy*(j+1)] ])  # create search box for this cell
 #          b = BoundingBox.from_list([ [dims.oy+dims.hy*j, dims.ox+dims.hx*i], [dims.oy+dims.hy*(j+1), dims.ox+dims.hx*(i+1)] ])  # create search box for this cell
           network_currentCell = roadNetwork.region(b)  # find geometry within bounding-box
 ##          maxlinkcapacity_currentCell = maxlinkcapacity.currentCell(b)  # find raster within bounding-box: doesn't work, because (so far) maxlinkcapacity raster has incorrect values to begin with
-#          maxlinkcapacity_currentCell = network_currentCell.rasterise(80, "output = max(0, capacity);", GeometryType.LineString)  # create finer-grained raster containing within each cell the maximum link-capacity: this works
-          maxlinkcapacity_currentCell = network_currentCell.rasterise(CELLSIZEFINE_m, "output = max(0, capacity);", GeometryType.LineString)  # create finer-grained raster containing within each cell the maximum link-capacity: this works
-#          maxlinkcapacity_currentCell = network_currentCell.rasterise(640, "output = max(0, capacity);", GeometryType.LineString)  # this works, and perhaps slightly faster than with cell-size of 80, but the difference is only about 1%
+          maxlinkcapacity_currentCell = network_currentCell.rasterise(CELLSIZEFINE_m, "output = max(0, capacity);", GeometryType.LineString)  # create finer-grained raster containing within each cell the maximum link-capacity: with CELLSIZEFINE_m = 80, this works
+#          maxlinkcapacity_currentCell = network_currentCell.rasterise(640, "output = max(0, capacity);", GeometryType.LineString)  # this works, and slightly faster than with cell-size of 80, but the difference is only about 1%
 ##          maxlinkcapacity_currentCell = network_currentCell.rasterise(1280, "output = max(0, capacity);", GeometryType.LineString)  # cell-size of 1280 FAILS
           largest_maxlinkcapacity_currentCell = maxlinkcapacity_currentCell.max()
           print(f"largest_maxlinkcapacity_currentCell is {largest_maxlinkcapacity_currentCell}")
@@ -500,7 +500,7 @@ def findRisks(cfgJson):
 
     # Find currentFire's contour:
     print("Creating 'contourVector' layer ...")
-    contourVector = isInsideFirePerimeter.vectorise( [ 0.5 ] )
+    contourVector = isInsideFirePerimeter.vectorise( [ 0.5 ] )  # 0.5 is between the possible values, 0 and 1, of isInsideFirePerimeter
 ##    contourVector.write(pth.join(outputDir, f"contourVector_{int(fire_max_time):06d}.tif"))  # returns "'AttributeError: 'Vector' object has no attribute 'write'"
 #    with open(pth.join(outputDir, f"contourVector_{int(fire_max_time):06d}.geojson"), "w") as contourfile:
 #      contourfile.write(vectorToGeoJson(contourVector))
@@ -741,16 +741,16 @@ def findRisks(cfgJson):
 
 
     print(f"len(evacuationTimeByNodeID) is {len(evacuationTimeByNodeID)}")
-    for popNode in evacuationTimeByNodeID:
-      if popNode in meanTimeToEvacuateByPopulationNode:
+    for (popNode, pointID) in evacuationTimeByNodeID:
+      if (popNode, pointID) in meanTimeToEvacuateByPopulationNode:
 #        sumEvacuationTimesSoFar = meanTimeToEvacuateByPopulationNode[popNode]['sumEvacTimes']
 #        numFiresInsideSoFar = meanTimeToEvacuateByPopulationNode[popNode]['numFiresInside']
-        meanTimeToEvacuateByPopulationNode[popNode]['sumEvacTimes'] += evacuationTimeByNodeID[ popNode ]
-        meanTimeToEvacuateByPopulationNode[popNode]['numFiresInside'] += 1
+        meanTimeToEvacuateByPopulationNode[popNode, pointID]['sumEvacTimes'] += evacuationTimeByNodeID[ popNode, pointID ]
+        meanTimeToEvacuateByPopulationNode[popNode, pointID]['numFiresInside'] += 1
       else:
-        meanTimeToEvacuateByPopulationNode[popNode] = dict()
-        meanTimeToEvacuateByPopulationNode[popNode]['sumEvacTimes'] = evacuationTimeByNodeID[ popNode ]
-        meanTimeToEvacuateByPopulationNode[popNode]['numFiresInside'] = 1
+        meanTimeToEvacuateByPopulationNode[popNode, pointID] = dict()
+        meanTimeToEvacuateByPopulationNode[popNode, pointID]['sumEvacTimes'] = evacuationTimeByNodeID[ popNode, pointID ]
+        meanTimeToEvacuateByPopulationNode[popNode, pointID]['numFiresInside'] = 1
     print(f"len(positivePopulationInsideFireByNodeID) is {len(positivePopulationInsideFireByNodeID)}")
     numPopulationNodesByFire[ fireName ] = len(positivePopulationInsideFireByNodeID)
 ##    print(f"criticalLinks is {criticalLinks}")
@@ -758,11 +758,11 @@ def findRisks(cfgJson):
 #    print(f"criticalLinksInsideFireBoundingBox is {criticalLinksInsideFireBoundingBox}")
     print(f"len(criticalLinksInsideFireBoundingBox) is {len(criticalLinksInsideFireBoundingBox)}")
     numCriticalLinksByFire[ fireName ] = len(criticalLinksInsideFireBoundingBox)
-    for link in criticalLinksInsideFireBoundingBox:
-      if link in numEvacuationsLinkIsCriticalTo:
-        numEvacuationsLinkIsCriticalTo[ link ] += 1
+    for (MATsimID_link, lineStringID) in criticalLinksInsideFireBoundingBox:
+      if (MATsimID_link, lineStringID) in numEvacuationsLinkIsCriticalTo:
+        numEvacuationsLinkIsCriticalTo[ MATsimID_link, lineStringID ] += 1
       else:
-        numEvacuationsLinkIsCriticalTo[ link ] = 1
+        numEvacuationsLinkIsCriticalTo[ MATsimID_link, lineStringID ] = 1
 
 
     # Write data:
@@ -781,10 +781,10 @@ def findRisks(cfgJson):
 
 
   MAXEVACTIME_FINITE = 100.0  # (in hours) maximum time that any population-node should take to evacuate if it isn't infinite
-  for popNode in meanTimeToEvacuateByPopulationNode:
-    meanTimeToEvacuateByPopulationNode[popNode]['meanTimeToEvacuate'] = meanTimeToEvacuateByPopulationNode[popNode]['sumEvacTimes'] / meanTimeToEvacuateByPopulationNode[popNode]['numFiresInside']
-    if meanTimeToEvacuateByPopulationNode[popNode]['meanTimeToEvacuate'] > MAXEVACTIME_FINITE:
-      meanTimeToEvacuateByPopulationNode[popNode]['meanTimeToEvacuate'] = MAXEVACTIME_FINITE
+  for (popNode, pointID) in meanTimeToEvacuateByPopulationNode:
+    meanTimeToEvacuateByPopulationNode[popNode, pointID]['meanTimeToEvacuate'] = meanTimeToEvacuateByPopulationNode[popNode, pointID]['sumEvacTimes'] / meanTimeToEvacuateByPopulationNode[popNode, pointID]['numFiresInside']
+    if meanTimeToEvacuateByPopulationNode[popNode, pointID]['meanTimeToEvacuate'] > MAXEVACTIME_FINITE:
+      meanTimeToEvacuateByPopulationNode[popNode, pointID]['meanTimeToEvacuate'] = MAXEVACTIME_FINITE
   print(f"meanTimeToEvacuateByPopulationNode is {meanTimeToEvacuateByPopulationNode}")
   print(f"numPopulationNodesByFire is {numPopulationNodesByFire}")
   print(f"numCriticalLinksByFire is {numCriticalLinksByFire}")
@@ -815,27 +815,47 @@ def findRisks(cfgJson):
 #  print(f"ignitionRisk dimensions is {dims}")
   ignitionRisk.write(pth.join(outputDir, f"ignitionRisk_{int(CELLSIZELARGE_m)}.tif"))  # write raster-layer 'ignitionRisk' to a file
 
+  elapsedTime = time()
+  print(f"findEvacuationRisks.py has run for {elapsedTime - startTime} seconds so far.")
 
-#  print("Creating 'pointOfImpactRisk' layer ...")
+
+  # Record each road-link's point-of-impact risk:
   print("Creating 'roadNetworkWithRiskProperties' layer ...")  # to record the point-of-impact risk for each road-link, i.e. the number of evacuation-flows the link is critical to, as well as the community risk for each population-node, i.e. the mean time taken to evacuate each node over all fires that contain it
-  numLinksProcessed = 0
-  for idLS in roadNetwork.getLineStringIndexes():
-    MATsimID_link = roadNetwork.getProperty( idLS, 'matsim_linkID' )
-    if MATsimID_link in numEvacuationsLinkIsCriticalTo:
-#      print(f"idLS {idLS}, MATsimID_link {MATsimID_link}")
-      roadNetwork.setProperty(idLS, "numEvacsLinkCriticalTo", numEvacuationsLinkIsCriticalTo[MATsimID_link])
-      numLinksProcessed += 1
-      if numLinksProcessed % 100 == 0:
-        print(f"numLinksProcessed is {numLinksProcessed}")
-    else:
-#      print(f"idLS {idLS}: MATsimID_link {MATsimID_link} NOT in numEvacuationsLinkIsCriticalTo.")
-      pass
-#    roadNetwork.setProperty(idLS, "numEvacsLinkCriticalTo", numEvacuationsLinkIsCriticalTo.get(MATsimID_link,0))
+  print("Setting each road-link's 'numEvacsLinkCriticalTo' property ...")
+#  numLinksProcessed = 0  # for monitoring progress of this time-consuming computation
+#  for idLS in roadNetwork.getLineStringIndexes():
+#    MATsimID_link = roadNetwork.getProperty( idLS, 'matsim_linkID' )
+#    if MATsimID_link in numEvacuationsLinkIsCriticalTo:
+###      print(f"idLS {idLS}, MATsimID_link {MATsimID_link}")
+##      roadNetwork.setProperty(idLS, "numEvacsLinkCriticalTo_2", numEvacuationsLinkIsCriticalTo[MATsimID_link])
+#      roadNetwork.setProperty(idLS, "numEvacsLinkCriticalTo", numEvacuationsLinkIsCriticalTo[MATsimID_link])
+#      numLinksProcessed += 1
+#      if numLinksProcessed % 100 == 0:
+#        print(f"numLinksProcessed is {numLinksProcessed}")
+#    else:
+##      print(f"idLS {idLS}: MATsimID_link {MATsimID_link} NOT in numEvacuationsLinkIsCriticalTo.")
+#      pass
+##    roadNetwork.setProperty(idLS, "numEvacsLinkCriticalTo", numEvacuationsLinkIsCriticalTo.get(MATsimID_link,0))
+  for (MATsimID_link, lineStringID) in numEvacuationsLinkIsCriticalTo:
+    roadNetwork.setProperty(lineStringID, "numEvacsLinkCriticalTo", numEvacuationsLinkIsCriticalTo[MATsimID_link, lineStringID])
 
-  for idx in roadNetwork.getPointIndexes():
-    MATsimID_node = roadNetwork.getProperty( idx, 'matsim_nodeID' )
-    if MATsimID_node in meanTimeToEvacuateByPopulationNode:
-      roadNetwork.setProperty(idx, "meanTimeToEvacuate", meanTimeToEvacuateByPopulationNode[MATsimID_node]['meanTimeToEvacuate'])
+  elapsedTime = time()
+  print(f"findEvacuationRisks.py has run for {elapsedTime - startTime} seconds so far.")
+
+  # Record each injection-node's community risk:
+  print("Setting each injection-node's 'meanTimeToEvacuate' property ...")
+#  for idx in roadNetwork.getPointIndexes():
+#    MATsimID_node = roadNetwork.getProperty( idx, 'matsim_nodeID' )
+#    if MATsimID_node in meanTimeToEvacuateByPopulationNode:
+##      roadNetwork.setProperty(idx, "meanTimeToEvacuate_2", meanTimeToEvacuateByPopulationNode[MATsimID_node]['meanTimeToEvacuate'])
+#      roadNetwork.setProperty(idx, "meanTimeToEvacuate", meanTimeToEvacuateByPopulationNode[MATsimID_node]['meanTimeToEvacuate'])
+  for (MATsimID_node, pointID) in meanTimeToEvacuateByPopulationNode:
+#    print(f"MATsimID_node is {repr(MATsimID_node)}, pointID is {repr(pointID)}")
+    roadNetwork.setProperty(pointID, "meanTimeToEvacuate", meanTimeToEvacuateByPopulationNode[MATsimID_node, pointID]['meanTimeToEvacuate'])
+
+
+  elapsedTime = time()
+  print(f"findEvacuationRisks.py has run for {elapsedTime - startTime} seconds so far.")
 
   with open(pth.join(outputDir, f"roadNetworkWithRiskProperties_{int(CELLSIZELARGE_m)}_allFires.geojson"), "w") as f:
     f.write(vectorToGeoJson(roadNetwork))

@@ -67,6 +67,7 @@ def geoJSONtoAdjacencyMatrix( JSONnetworkfilename, exitnodes ):
 #        pointsWithCoords[key]['matsim_nodeID'] = feature['properties']['matsim_nodeID']
         pointsWithCoords[ key ] = {'matsimID': feature['properties']['matsim_nodeID'], 'index': currentIntIDofPoint}
         currentIntIDofPoint += 1
+        pointsWithCoords[key]['pointID'] = feature['properties']['pointID']
       else:
         print(f"A Point with coordinates {key} already exists in pointsWithCoords")
         numDuplicatePoints += 1
@@ -89,6 +90,7 @@ def geoJSONtoAdjacencyMatrix( JSONnetworkfilename, exitnodes ):
         linestringsWithCoords[key]['freespeed'] = float( feature['properties']['freespeed'] )
         linestringsWithCoords[key]['length'] = float( feature['properties']['length'] )
         linestringsWithCoords[key]['matsim_linkID'] = feature['properties']['matsim_linkID']
+        linestringsWithCoords[key]['lineStringID'] = feature['properties']['lineStringID']
         linestringsWithCoords[key]['oneway'] = bool(int( feature['properties']['oneway'] ))  # convert value of feature['properties']['oneway'] to a Boolean: "1" becomes 'True' (and also "2", "3", "-1", etc.) and "0" becomes 'False', but "0.0" and any other string not expressing an integer will raise a ValueError. TODO: decide whether and how the 'oneway' property should affect which solutions are allowed
         assert linestringsWithCoords[key]['oneway']  # we assume every arc specified in jsonobj["features"] is one-way, so that a two-arc link is specified as two one-way arcs
 #        linestringsWithCoords[key]['permlanes'] = int( feature['properties']['permlanes'] )
@@ -140,17 +142,18 @@ def geoJSONtoAdjacencyMatrix( JSONnetworkfilename, exitnodes ):
   print(f"timeToRemoveLinestringsWithMissingEndpoints is {timeToRemoveLinestringsWithMissingEndpoints:.3} seconds.")
   adjacency = np.zeros( shape=(N,N) )  # construct adjacency matrix (used only by SEM2)
 #  pointcoordsbyID = {}
-  pointcoordsandindexbyID = {}
+  pointCoordsIndexandPointIDbyMATsimID = {}
   pointNodeIDbyIndex = {}
 #  indexofnode = 0  # map each matsim_nodeID (a string) to a non-negative integer, for use as a row- or column-index in the adjacency matrix
 #pointsWithCoords[ key ] = {'matsimID': feature['properties']['matsim_nodeID'], 'index': currentIntIDofPoint}
 #  for (xy, pointID) in pointsWithCoords.items():
   for (xy, pointDict) in pointsWithCoords.items():
-###    pointcoordsbyID[pointID] = xy
-##    pointcoordsbyID[pointDict['matsimID']] = xy
-#    pointcoordsbyID[pointDict['matsimID']] = {'coords': xy, 'index': indexofnode}
-#    pointcoordsandindexbyID[pointDict['matsimID']] = {'coords': xy, 'index': indexofnode}
-    pointcoordsandindexbyID[pointDict['matsimID']] = {'coords': xy, 'index': pointDict['index']}
+####    pointcoordsbyID[pointID] = xy
+###    pointcoordsbyID[pointDict['matsimID']] = xy
+##    pointcoordsbyID[pointDict['matsimID']] = {'coords': xy, 'index': indexofnode}
+##    pointcoordsandindexbyID[pointDict['matsimID']] = {'coords': xy, 'index': indexofnode}
+#    pointcoordsandindexbyID[pointDict['matsimID']] = {'coords': xy, 'index': pointDict['index']}
+    pointCoordsIndexandPointIDbyMATsimID[pointDict['matsimID']] = {'coords': xy, 'index': pointDict['index'], 'pointID': pointDict['pointID']}
     pointNodeIDbyIndex[pointDict['index']] = pointDict['matsimID']
 #    indexofnode += 1
 #  linkcoordsbyID = {}  # probably don't need, as 'linestringsWithCoords' contains all information about links
@@ -181,7 +184,7 @@ def geoJSONtoAdjacencyMatrix( JSONnetworkfilename, exitnodes ):
 #  print("linestringsWithCoords is", linestringsWithCoords)
   print(f"linestringsWithCoords has {len(linestringsWithCoords)} members")
 #  return (adjacency, exitnodes, pointcoordsbyID, linestringsWithCoords, freespeed, permlanes, linklength, linkcapacity, matsimlinkID, oneway)
-  return (adjacency, exitnodes, pointcoordsandindexbyID, pointNodeIDbyIndex, linestringsWithCoords, freespeed, permlanes, linklength, linkcapacity, matsimlinkID, oneway)
+  return (adjacency, exitnodes, pointCoordsIndexandPointIDbyMATsimID, pointNodeIDbyIndex, linestringsWithCoords, freespeed, permlanes, linklength, linkcapacity, matsimlinkID, oneway)
 
 
 #def setuptrafficflowproblem( JSONnetworkfilename, b0 ):
@@ -224,7 +227,7 @@ def setuptrafficflowproblem( JSONnetworkfilename, exitnodes, SEMversion ):
   meanMinGapinStoppedTraffic_Km = .004
 
 #  (adjacency, exitnodes, pointcoordsbyID, linestringsWithCoords, lK, numlanes, linklength, linkcapacity, matsimlinkID, oneway) = geoJSONtoAdjacencyMatrix( JSONnetworkfilename, exitnodes )  # 'lK' is free speed
-  (adjacency, exitnodes, pointcoordsandindexbyID, pointNodeIDbyIndex, linestringsWithCoords, lK, numlanes, linklength, linkcapacity, matsimlinkID, oneway) = geoJSONtoAdjacencyMatrix( JSONnetworkfilename, exitnodes )  # 'lK' is free speed
+  (adjacency, exitnodes, pointCoordsIndexandPointIDbyMATsimID, pointNodeIDbyIndex, linestringsWithCoords, lK, numlanes, linklength, linkcapacity, matsimlinkID, oneway) = geoJSONtoAdjacencyMatrix( JSONnetworkfilename, exitnodes )  # 'lK' is free speed
 #  print("adjacency is", adjacency)
 ##  leafnodes = np.sum(adjacency, axis=1) == 1  # np.sum(adjacency, axis=1) is row-wise sums of 'adjacency'
 ##  print("leafnodes is", leafnodes)
@@ -232,7 +235,7 @@ def setuptrafficflowproblem( JSONnetworkfilename, exitnodes, SEMversion ):
 ##  print("leafnodeindices is", leafnodeindices)
   print("exitnodes is", exitnodes)
 ##  print("pointcoordsbyID is", pointcoordsbyID)
-#  print("pointcoordsandindexbyID is", pointcoordsandindexbyID)
+#  print("pointCoordsIndexandPointIDbyMATsimID is", pointCoordsIndexandPointIDbyMATsimID)
 ##  b0 = np.array([400])  # the inflow at each (non-leaf) node is proportional to the population there, and is measured in vehicles per hour
 #  print("lK is", lK)  # 'lK' is free speed
 #  print("numlanes is", numlanes)
@@ -517,7 +520,7 @@ def setuptrafficflowproblem( JSONnetworkfilename, exitnodes, SEMversion ):
 #  print("exitnodes is", exitnodes)
 ##  injectionnodes = [i for i in range(N) if not leafnodesBool[i]]
 #  injectionnodes = [i for i in range(N) if i not in exitnodes]
-  injectionnodes = [nodeID for nodeID in pointcoordsandindexbyID if nodeID not in exitnodes]
+  injectionnodes = [nodeID for nodeID in pointCoordsIndexandPointIDbyMATsimID if nodeID not in exitnodes]
 #  print("injectionnodes is", injectionnodes)
   print(f"len(injectionnodes) is {len(injectionnodes)}")
   indexamonginjectionorexitnodes = np.zeros(N, dtype=int)
@@ -526,14 +529,14 @@ def setuptrafficflowproblem( JSONnetworkfilename, exitnodes, SEMversion ):
 #    indexamonginjectionorexitnodes[i] = k
   k = 0
   for nodeID in injectionnodes:
-    indexamonginjectionorexitnodes[ pointcoordsandindexbyID[nodeID]['index'] ] = k
+    indexamonginjectionorexitnodes[ pointCoordsIndexandPointIDbyMATsimID[nodeID]['index'] ] = k
     k += 1
 #  for k, i in enumerate(list(exitnodes)):
 ##    print("k %d, i %d" % (k, i))
 #    indexamonginjectionorexitnodes[i] = k
   k = 0
   for nodeID in exitnodes:
-    indexamonginjectionorexitnodes[ pointcoordsandindexbyID[nodeID]['index'] ] = k
+    indexamonginjectionorexitnodes[ pointCoordsIndexandPointIDbyMATsimID[nodeID]['index'] ] = k
     k += 1
 #  print("indexamonginjectionorexitnodes is %s" % indexamonginjectionorexitnodes)
   if SEMversion == 'SEM2':
@@ -565,7 +568,7 @@ def setuptrafficflowproblem( JSONnetworkfilename, exitnodes, SEMversion ):
 ###  return (terminatorPressure, eps, eps_flowbalance, flowfunc, flowijfunc, derivijfunc, adjacency, N, exitnodes, injectionnodes, indexamonginjectionorexitnodes, neighboursThatCanFlowIntoj, hExitNodes, totalinflow, argsflowfunc, lK, linklength, v0, pointcoordsbyID)
 ##  return (terminatorPressure, eps, eps_flowbalance, flowfunc, flowijfunc, derivijfunc, adjacency, N, exitnodes, injectionnodes, indexamonginjectionorexitnodes, neighboursThatCanFlowIntoj, hExitNodes, argsflowfunc, pointcoordsbyID)
 #  return (terminatorPressure, eps, flowfunc, flowijfunc, derivijfunc, adjacency, N, exitnodes, injectionnodes, indexamonginjectionorexitnodes, neighboursThatCanFlowIntoj, hExitNodes, argsflowfunc, pointcoordsbyID, linestringsWithCoords)
-  return (terminatorPressure, eps, flowfunc, flowijfunc, derivijfunc, adjacency, N, exitnodes, injectionnodes, indexamonginjectionorexitnodes, neighboursThatCanReceiveFlowFromi, neighboursThatCanFlowIntoj, hExitNodes, argsflowfunc, pointcoordsandindexbyID, pointNodeIDbyIndex, linestringsWithCoords)
+  return (terminatorPressure, eps, flowfunc, flowijfunc, derivijfunc, adjacency, N, exitnodes, injectionnodes, indexamonginjectionorexitnodes, neighboursThatCanReceiveFlowFromi, neighboursThatCanFlowIntoj, hExitNodes, argsflowfunc, pointCoordsIndexandPointIDbyMATsimID, pointNodeIDbyIndex, linestringsWithCoords)
 
 
 def sign(x):
@@ -1944,7 +1947,7 @@ def verifyOnEveryLinkThatPropagatingFlowMatchesqijValues(propagatingwavefronts, 
 
 
 #def evolutionofwaveandshockfrontsSEM4( inflowsandflowperiodsByNodeID, subflowsToAssignedExitNodesByInjectionNodeID, simulDuration, parentsOnShortestPathsFromInjectionNodes, qijatnodei, densityijatnodei, qijatnodej, densityijatnodej, speedijatnodej, flowstateijatnodej, argsflowfunc, exitnodes, b0, indexamonginjectionorexitnodes, shortestPathToAnyExit, shortestPathToExit, flowijfunc, flowfunc, injectionnodes, outflowsByNodeID, pointcoordsandindexbyID, pointNodeIDbyIndex, nextNodeInShortestPath, directedNeighboursInShortestPathTreeOfNode, assignedExitNodesReachedDownstreamOfArc ):
-def evolutionofwaveandshockfrontsSEM4( inflowsandflowperiodsByNodeID, subflowsToAssignedExitNodesByInjectionNodeID, simulDuration, parentsOnShortestPathsFromInjectionNodes, qijatnodei, densityijatnodei, qijatnodej, densityijatnodej, speedijatnodej, flowstateijatnodej, argsflowfunc, exitnodes, b0, indexamonginjectionorexitnodes, shortestPathToAnyExit, shortestPathToExit, flowijfunc, flowfunc, injectionnodes, outflowsByNodeID, pointcoordsandindexbyID, pointNodeIDbyIndex, nextNodeInShortestPath, successorNodeOnShortestPathFromNodeToExitNode, assignedExitNodesReachedDownstreamOfArc ):
+def evolutionofwaveandshockfrontsSEM4( inflowsandflowperiodsByNodeID, subflowsToAssignedExitNodesByInjectionNodeID, simulDuration, parentsOnShortestPathsFromInjectionNodes, qijatnodei, densityijatnodei, qijatnodej, densityijatnodej, speedijatnodej, flowstateijatnodej, argsflowfunc, exitnodes, b0, indexamonginjectionorexitnodes, shortestPathToAnyExit, shortestPathToExit, flowijfunc, flowfunc, injectionnodes, outflowsByNodeID, pointCoordsIndexandPointIDbyMATsimID, pointNodeIDbyIndex, nextNodeInShortestPath, successorNodeOnShortestPathFromNodeToExitNode, assignedExitNodesReachedDownstreamOfArc ):
   EPS = 1e-6
   INITIALTIMESTAMP = 0.0
   congestionAlertMessages = []  # will change if congestion is detected at an injection-node
@@ -1963,7 +1966,7 @@ def evolutionofwaveandshockfrontsSEM4( inflowsandflowperiodsByNodeID, subflowsTo
 #  totalinflows = sum(d['inflow'] for d in inflowsandflowperiodsByNodeID.values())
     inflowata = inflowsandflowperiodsByNodeID[nodeIDa]['inflow']
     assert sum(d for d in subflowsToAssignedExitNodesByInjectionNodeID[nodeIDa].values()) == inflowata  # the subflows assigned to exit-nodes sum to the injection-flow
-    a = pointcoordsandindexbyID[nodeIDa]['index'] 
+    a = pointCoordsIndexandPointIDbyMATsimID[nodeIDa]['index'] 
     if inflowata <= EPS:
       print(f"WARNING: inflow of {inflowata} veh/hr at injection-node {a} is too close to zero: no downstream-propagating wavefront is created at {a}.")
       continue
@@ -1978,7 +1981,7 @@ def evolutionofwaveandshockfrontsSEM4( inflowsandflowperiodsByNodeID, subflowsTo
     # For each successor-node of a on a shortest-path, construct a list of the exit-nodes that traffic at a is assigned to that are reached by going next to b:
     exitNodesReachedViaSuccessorNode = {}
     for exitnode in subflowsToAssignedExitNodesByInjectionNodeID[nodeIDa]:
-      e = pointcoordsandindexbyID[exitnode]['index']
+      e = pointCoordsIndexandPointIDbyMATsimID[exitnode]['index']
       successorNodeToReachThisExitNode = nextNodeInShortestPath[a,e]
       if successorNodeToReachThisExitNode in exitNodesReachedViaSuccessorNode:
         exitNodesReachedViaSuccessorNode[successorNodeToReachThisExitNode].append( e )
@@ -2671,7 +2674,7 @@ def evolutionofwaveandshockfrontsSEM4( inflowsandflowperiodsByNodeID, subflowsTo
   return (cumulNumVehiclesToHaveDepartedLinkDuringSimulation, outflowsByNodeID, congestionAlertMessages)
 
 
-def findShortestPathsSEM3or4( N, argsflowfunc, injectionnodes, exitnodes, pointcoordsandindexbyID, subflowsToAssignedExitNodesByInjectionNodeID):
+def findShortestPathsSEM3or4( N, argsflowfunc, injectionnodes, exitnodes, pointCoordsIndexandPointIDbyMATsimID, subflowsToAssignedExitNodesByInjectionNodeID):
   starttime = time.time()
   print("\nFinding shortest-path routes from all injection-nodes ...")
   vertices = range(N)
@@ -2709,7 +2712,7 @@ def findShortestPathsSEM3or4( N, argsflowfunc, injectionnodes, exitnodes, pointc
   parentsOnShortestPathsFromInjectionNodes = {}  # for each node, its immediate ancestors on all those shortest paths from injection-nodes that pass through that node
 #  for j in range(N):
   for nodeID2 in injectionnodes+list(exitnodes):
-    j = pointcoordsandindexbyID[nodeID2]['index'] 
+    j = pointCoordsIndexandPointIDbyMATsimID[nodeID2]['index'] 
     parentsOnShortestPathsFromInjectionNodes[j] = set()
 
 #  shortestDistanceToAnyExit = np.full( shape=len(injectionnodes), fill_value=9e99  )  # initialise to "infinity" each shortest distance from a non-leaf to an exit-node
@@ -2719,10 +2722,10 @@ def findShortestPathsSEM3or4( N, argsflowfunc, injectionnodes, exitnodes, pointc
   shortestPathToExit = {}  # for each injection-node i and exit-node e, the shortest path from i to e
 ##  for i in range(N):  # for each node construct the shortest path to an exit, its length, and the node-ID of that closest exit
   for nodeID1 in injectionnodes:  # only for injection-nodes do we need to construct the shortest path to an exit, its length, and the node-ID of that closest exit
-    i = pointcoordsandindexbyID[nodeID1]['index'] 
+    i = pointCoordsIndexandPointIDbyMATsimID[nodeID1]['index'] 
 #    for j in range(N):
     for nodeID2 in injectionnodes+list(exitnodes):
-      j = pointcoordsandindexbyID[nodeID2]['index'] 
+      j = pointCoordsIndexandPointIDbyMATsimID[nodeID2]['index'] 
       if j == i: continue
       (shortestpath, shortestpathlength) = constructShortestPath(i, j, nextNodeInShortestPath, predictedLinkTraversalTime)
       if isinstance(shortestpathlength, float):
@@ -2752,7 +2755,7 @@ def findShortestPathsSEM3or4( N, argsflowfunc, injectionnodes, exitnodes, pointc
 #    directedNeighboursInShortestPathTreeOfNode[i] = set()
 ##    assignedExitNodesReachedDownstreamOfArc[i] = set()
   for nodeID in injectionnodes:  # proceed down each injection-node's shortest path to an exit, adding for each node after the first one on the path its parent on the path as one of that node's parents on all shortest paths from injection-nodes
-    i = pointcoordsandindexbyID[nodeID]['index'] 
+    i = pointCoordsIndexandPointIDbyMATsimID[nodeID]['index'] 
     if i not in shortestPathToAnyExit:
       print(f"There is no path to an exit from node {i}.")
       continue
@@ -2767,7 +2770,7 @@ def findShortestPathsSEM3or4( N, argsflowfunc, injectionnodes, exitnodes, pointc
 #        flowstateijatnodej[parentofj, j] = 'freeflowstate'
     if nodeID not in subflowsToAssignedExitNodesByInjectionNodeID: continue
     for exitnode in subflowsToAssignedExitNodesByInjectionNodeID[nodeID]:
-      e = pointcoordsandindexbyID[exitnode]['index']
+      e = pointCoordsIndexandPointIDbyMATsimID[exitnode]['index']
 #      assignedExitNodesReachedDownstreamOfArc[e].add( e )
       for index, j in enumerate( shortestPathToExit[i, e] ):
         if index > 0:
@@ -2814,7 +2817,7 @@ def findShortestPathsSEM3or4( N, argsflowfunc, injectionnodes, exitnodes, pointc
 
 
 #def findShortestPathsSEM5(N, argsflowfunc, injectionnodes, exitnodes, pointcoordsandindexbyID, subflowsToAssignedExitNodesByInjectionNodeID):
-def findShortestPathsSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, subflowsToAssignedExitNodesByInjectionNodeID):
+def findShortestPathsSEM5(argsflowfunc, exitnodes, pointCoordsIndexandPointIDbyMATsimID, subflowsToAssignedExitNodesByInjectionNodeID):
 # Use Dijkstra's algorithm:
   starttime = time.time()
   congestionAlertMessages = []
@@ -2849,10 +2852,10 @@ def findShortestPathsSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, subf
 #    print(f"G.edges[{u},{v}]['weight'] is {G.edges[u,v]['weight']}")
 #  for nodeID1 in injectionnodes:  # only for injection-nodes do we need to construct the shortest path to each exit-node and its length
   for nodeID1 in subflowsToAssignedExitNodesByInjectionNodeID:  # only for the injection-nodes specified as keys of 'subflowsToAssignedExitNodesByInjectionNodeID' do we need to construct the shortest path to each exit-node and its length
-    i = pointcoordsandindexbyID[nodeID1]['index']
+    i = pointCoordsIndexandPointIDbyMATsimID[nodeID1]['index']
 #    for nodeID2 in exitnodes:
     for nodeID2 in subflowsToAssignedExitNodesByInjectionNodeID[nodeID1]:
-      j = pointcoordsandindexbyID[nodeID2]['index']
+      j = pointCoordsIndexandPointIDbyMATsimID[nodeID2]['index']
       print(f"injection-node is i={i}, exit-node is j={j}:")
 #      shortestPathDijkstra = nx.dijkstra_path(G, i, j, weight = lambda u, v, predictedLinkTraversalTime: predictedLinkTraversalTime[u,v])
 #      print(f"shortestPathDijkstra is {shortestPathDijkstra} km")
@@ -2884,10 +2887,10 @@ def findShortestPathsSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, subf
   print(f"A total of {len(congestionAlertMessages)} congestion-alert messages were reported.")
   congestionAlertMessages = []
   for nodeID1 in subflowsToAssignedExitNodesByInjectionNodeID:
-    i = pointcoordsandindexbyID[nodeID1]['index']
+    i = pointCoordsIndexandPointIDbyMATsimID[nodeID1]['index']
 #    for nodeID2 in exitnodes:
     for nodeID2 in subflowsToAssignedExitNodesByInjectionNodeID[nodeID1]:
-      j = pointcoordsandindexbyID[nodeID2]['index']
+      j = pointCoordsIndexandPointIDbyMATsimID[nodeID2]['index']
       print(f"injection-node is i={i}, exit-node is j={j}")
       lengthofshortestpath, path = lengthOfShortestPath[i,j], shortestPath[i,j]
       flowsonpath = [qij[u,path[k+1]] for k, u in enumerate(path[:-1])]
@@ -2903,7 +2906,7 @@ def findShortestPathsSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, subf
 
 
 #def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointNodeIDbyIndex, inflowsByNodeID, positivePopulationInsideFireByNodeID, subflowsToAssignedExitNodesByInjectionNodeID):
-def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointNodeIDbyIndex, positivePopulationInsideFireByNodeID, subflowsToAssignedExitNodesByInjectionNodeID):
+def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointCoordsIndexandPointIDbyMATsimID, pointNodeIDbyIndex, positivePopulationInsideFireByNodeID, subflowsToAssignedExitNodesByInjectionNodeID):
 # Uses Edmonds-Karp maximum-flow algorithm?
 # TODO: maximum-flow method can't handle parallel arcs, so must replace each two-way edge, i.e. pair of arcs in opposite directions, by adding a dummy node; see p. 711 of 'Introduction to Algorithms', third edition.
   starttime = time.time()
@@ -2943,10 +2946,10 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointN
 ##    for nodeID1 in subflowsToAssignedExitNodesByInjectionNodeID:  # only for the injection-nodes specified as keys of 'subflowsToAssignedExitNodesByInjectionNodeID' do we need to construct the shortest path to each exit-node and its length
 #    for nodeID1 in inflowsByNodeID:  # construct the shortest weighted path and its length from every injection-node to every exit-node
     for nodeID1 in positivePopulationInsideFireByNodeID:  # construct the shortest weighted path and its length from every injection-node to every exit-node
-      i = pointcoordsandindexbyID[nodeID1]['index']
+      i = pointCoordsIndexandPointIDbyMATsimID[nodeID1]['index']
 #      for nodeID2 in subflowsToAssignedExitNodesByInjectionNodeID[nodeID1]:
       for nodeID2 in exitnodes:
-        j = pointcoordsandindexbyID[nodeID2]['index']
+        j = pointCoordsIndexandPointIDbyMATsimID[nodeID2]['index']
 #        print(f"injection-node is i={i}, exit-node is j={j}:")
 #        shortestPathDijkstra = nx.dijkstra_path(G, i, j, weight = lambda u, v, predictedLinkTraversalTime: predictedLinkTraversalTime[u,v])
 #        print(f"shortestPathDijkstra is {shortestPathDijkstra} km")
@@ -3004,7 +3007,7 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointN
       Gmaximumflow.add_edges_from( [(v,dummyNode), (dummyNode,u)] )
       Gmaximumflow.edges[v,dummyNode]['capacity'] = argsflowfunc['linkcapacity'][frozenset({u,v})]  # assume the capacity of each two-way link is the same in either direction
       Gmaximumflow.edges[dummyNode,u]['capacity'] = argsflowfunc['linkcapacity'][frozenset({u,v})]
-      if u == pointcoordsandindexbyID[nodeID_possiblebug]['index']:
+      if u == pointCoordsIndexandPointIDbyMATsimID[nodeID_possiblebug]['index']:
         print(f"Gmaximumflow.edges[{v},{dummyNode}]['capacity'] is {Gmaximumflow.edges[v,dummyNode]['capacity']}")
     endtime_replaceAntiParallelArcs = time.time()
     timeToReplaceAntiParallelArcs = endtime_replaceAntiParallelArcs - starttime_replaceAntiParallelArcs
@@ -3018,13 +3021,13 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointN
   totalAssignedSubflowsIntoExitNode = {}  # will store total of subflows assigned to each exit-node
   totalAssignedSubflowsFromInjectionNodes = 0.0
 #  for nodeID2 in exitnodes:
-#    j = pointcoordsandindexbyID[nodeID2]['index']
+#    j = pointCoordsIndexandPointIDbyMATsimID[nodeID2]['index']
 #    totalAssignedSubflowsIntoExitNode[j] = 0.0
   if subflowsToAssignedExitNodesByInjectionNodeID != None:
     for nodeID1 in subflowsToAssignedExitNodesByInjectionNodeID:  # only for the injection-nodes specified as keys of 'subflowsToAssignedExitNodesByInjectionNodeID' do we need to construct the shortest path to each exit-node and its length
-      i = pointcoordsandindexbyID[nodeID1]['index']
+      i = pointCoordsIndexandPointIDbyMATsimID[nodeID1]['index']
       for nodeID2 in subflowsToAssignedExitNodesByInjectionNodeID[nodeID1]:
-        j = pointcoordsandindexbyID[nodeID2]['index']
+        j = pointCoordsIndexandPointIDbyMATsimID[nodeID2]['index']
         subflow = subflowsToAssignedExitNodesByInjectionNodeID[nodeID1][nodeID2]
         print(f"injection-node is i={i}, exit-node is j={j}: assigned subflow is {subflow} veh/hr")
 #        print(f"totalAssignedSubflowsFromInjectionNode is {totalAssignedSubflowsFromInjectionNode}")
@@ -3048,13 +3051,13 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointN
   else:  # subflowsToAssignedExitNodesByInjectionNodeID == None
 #    for nodeID1 in inflowsByNodeID:  # only to the injection-nodes with positive inflows do we need to add arcs from the super-source node '-1'
     for nodeID1 in positivePopulationInsideFireByNodeID:  # only to the injection-nodes with positive inflows do we need to add arcs from the super-source node '-1'
-      i = pointcoordsandindexbyID[nodeID1]['index']
+      i = pointCoordsIndexandPointIDbyMATsimID[nodeID1]['index']
 ##      print(f"inflowsByNodeID[{nodeID1}] is {inflowsByNodeID[nodeID1]}: adding arc of that capacity from super-source (node '-1') to node {i}.")  # incorrect: arc from super-source to injection-node should have infinite capacity
 ##      Gmaximumflow.add_edge(-1, i, capacity=inflowsByNodeID[nodeID1])  # -1 is source-node
 #      print(f"Adding arc of 'infinite' capacity {INFINITY} from super-source (node '-1') to node {i}.")
       Gmaximumflow.add_edge(-1, i, capacity=INFINITY)  # -1 is super-source node
     for nodeID2 in exitnodes:
-      j = pointcoordsandindexbyID[nodeID2]['index']
+      j = pointCoordsIndexandPointIDbyMATsimID[nodeID2]['index']
 #      print(f"Adding arc of 'infinite' capacity {INFINITY} from node {j} to super-sink (node '-2').")
       Gmaximumflow.add_edge(j, -2, capacity=INFINITY)  # -2 is super-sink node
 
@@ -3082,13 +3085,13 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointN
       Gmaximumflow.remove_node(dummyNode)
       Gmaximumflow.edges[v,u]['capacity'] = argsflowfunc['linkcapacity'][frozenset({u,v})]  # assume the capacity of each two-way link is the same in either direction
       assert qij[v,dummyNode] == qij[dummyNode,u]
-      if u == pointcoordsandindexbyID[nodeID_possiblebug]['index']:
+      if u == pointCoordsIndexandPointIDbyMATsimID[nodeID_possiblebug]['index']:
         print(f"Before removal of dummyNode {dummyNode} and restoration of original antiparallel arc ({v},{u}), qij[{v},{dummyNode}] is {qij[v,dummyNode]}, qij[{dummyNode},{u}] is {qij[dummyNode,u]}.")
       qij[v,u] = qij[v,dummyNode]
       del qij[v,dummyNode]
       del qij[dummyNode,u]
 #    print("After restoration of every parallel arc and removal of its dummy-node, Gmaximumflow.nodes() is %s" % Gmaximumflow.nodes())
-      if u == pointcoordsandindexbyID[nodeID_possiblebug]['index']:
+      if u == pointCoordsIndexandPointIDbyMATsimID[nodeID_possiblebug]['index']:
         print(f"After removal of dummyNode {dummyNode} and restoration of original antiparallel arc ({v},{u}), qij[{v},{u}] is {qij[v,u]} and qij[{u},{v}] is {qij[u,v]}.")
 #  print("Gmaximumflow.edges() is %s" % Gmaximumflow.edges())
 #  for u, v in Gmaximumflow.edges():
@@ -3128,7 +3131,7 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointN
       outflowsByNodeID[pointNodeIDbyIndex[j]] = -maxflow_dict[j][-2]
   else:
     for nodeID2 in exitnodes:
-      j = pointcoordsandindexbyID[nodeID2]['index']
+      j = pointCoordsIndexandPointIDbyMATsimID[nodeID2]['index']
 #      outflowsByNodeID[pointNodeIDbyIndex[j]] = -maxflow_dict[j][-2]
       outflowsByNodeID[nodeID2] = -maxflow_dict[j][-2]
   print(f"outflowsByNodeID is {outflowsByNodeID}")
@@ -3140,9 +3143,10 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointN
 #    print(f"qij[{repr(nodeIDa)},{repr(nodeIDb)}] is {qij[a,b]}")
 
 #  nodeID_possiblebug = '97560366'  # for debugging: this node appears to violate the flow-conservation constraint
-  j = pointcoordsandindexbyID[nodeID_possiblebug]['index']
-  coordsOfj = pointcoordsandindexbyID[nodeID_possiblebug]['coords']
-  print(f"Node with ID {repr(nodeID_possiblebug)} has index {j} and coords {coordsOfj}.")
+  j = pointCoordsIndexandPointIDbyMATsimID[nodeID_possiblebug]['index']
+  coordsOfj = pointCoordsIndexandPointIDbyMATsimID[nodeID_possiblebug]['coords']
+  pointIDofj = pointCoordsIndexandPointIDbyMATsimID[nodeID_possiblebug]['pointID']
+  print(f"Node with MATsim ID {repr(nodeID_possiblebug)} has index {j}, coords {coordsOfj}, and Geostack pointID {pointIDofj}.")
   if FINDMAXIMUMFLOWONSHORTESTPATHARCSONLY:
     arcsInGmaximumflow = arcsInShortestPaths
   else:
@@ -3166,18 +3170,22 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointN
   evacuationTimeByNodeID = dict()  # time needed to evacuate each injection-node, in hours
 #  for nodeID1 in inflowsByNodeID:
   for nodeID1 in positivePopulationInsideFireByNodeID:
-    i = pointcoordsandindexbyID[nodeID1]['index']
+    i = pointCoordsIndexandPointIDbyMATsimID[nodeID1]['index']
     inflowsByNodeID_maxFlowSoln[nodeID1] = maxflow_dict[-1][i]
+    GeostackPointID = pointCoordsIndexandPointIDbyMATsimID[nodeID1]['pointID']
     assert inflowsByNodeID_maxFlowSoln[nodeID1] >= 0.0
 #    print(f"inflowsByNodeID[{nodeID1}] is {inflowsByNodeID[nodeID1]}, inflowsByNodeID_maxFlowSoln[{nodeID1}] is {inflowsByNodeID_maxFlowSoln[nodeID1]}.")
 #      if maxflow_dict[-1][i] < inflowsByNodeID[nodeID1]:
 #    evacuationTimeByNodeID[nodeID1] = inflowsByNodeID[nodeID1] / inflowsByNodeID_maxFlowSoln[nodeID1]  # time needed to evacuate this injection-node, assuming the demand-flow 
     if inflowsByNodeID_maxFlowSoln[nodeID1] <= EPS:
-      evacuationTimeByNodeID[nodeID1] = INFINITY  # time needed to evacuate this injection-node, in hours
-      print(f"evacuationTimeByNodeID[{nodeID1}] = positivePopulationInsideFireByNodeID[{nodeID1}]/inflowsByNodeID_maxFlowSoln[{nodeID1}] = {positivePopulationInsideFireByNodeID[nodeID1]}/{inflowsByNodeID_maxFlowSoln[nodeID1]} = {evacuationTimeByNodeID[nodeID1]} hours.")
+#      evacuationTimeByNodeID[nodeID1] = INFINITY  # time needed to evacuate this injection-node, in hours
+      evacuationTimeByNodeID[nodeID1, GeostackPointID] = INFINITY  # time needed to evacuate this injection-node, in hours
+      print(f"evacuationTimeByNodeID[{nodeID1}, {GeostackPointID}] = positivePopulationInsideFireByNodeID[{nodeID1}]/inflowsByNodeID_maxFlowSoln[{nodeID1}] = {positivePopulationInsideFireByNodeID[nodeID1]}/{inflowsByNodeID_maxFlowSoln[nodeID1]} = {evacuationTimeByNodeID[nodeID1, GeostackPointID]} hours.")
     else:
-      evacuationTimeByNodeID[nodeID1] = positivePopulationInsideFireByNodeID[nodeID1] / inflowsByNodeID_maxFlowSoln[nodeID1]  # time needed to evacuate this injection-node, in hours
-      print(f"evacuationTimeByNodeID[{nodeID1}] = positivePopulationInsideFireByNodeID[{nodeID1}]/inflowsByNodeID_maxFlowSoln[{nodeID1}] = {positivePopulationInsideFireByNodeID[nodeID1]}/{inflowsByNodeID_maxFlowSoln[nodeID1]} = {positivePopulationInsideFireByNodeID[nodeID1]/inflowsByNodeID_maxFlowSoln[nodeID1]} hours.")
+#      evacuationTimeByNodeID[nodeID1] = positivePopulationInsideFireByNodeID[nodeID1] / inflowsByNodeID_maxFlowSoln[nodeID1]  # time needed to evacuate this injection-node, in hours
+      evacuationTimeByNodeID[nodeID1, GeostackPointID] = positivePopulationInsideFireByNodeID[nodeID1] / inflowsByNodeID_maxFlowSoln[nodeID1]  # time needed to evacuate this injection-node, in hours
+#      print(f"evacuationTimeByNodeID[{nodeID1}] = positivePopulationInsideFireByNodeID[{nodeID1}]/inflowsByNodeID_maxFlowSoln[{nodeID1}] = {positivePopulationInsideFireByNodeID[nodeID1]}/{inflowsByNodeID_maxFlowSoln[nodeID1]} = {positivePopulationInsideFireByNodeID[nodeID1]/inflowsByNodeID_maxFlowSoln[nodeID1]} hours.")
+      print(f"evacuationTimeByNodeID[{nodeID1}, {GeostackPointID}] = positivePopulationInsideFireByNodeID[{nodeID1}]/inflowsByNodeID_maxFlowSoln[{nodeID1}] = {positivePopulationInsideFireByNodeID[nodeID1]}/{inflowsByNodeID_maxFlowSoln[nodeID1]} = {positivePopulationInsideFireByNodeID[nodeID1]/inflowsByNodeID_maxFlowSoln[nodeID1]} hours.")
   print(f"inflowsByNodeID_maxFlowSoln is {inflowsByNodeID_maxFlowSoln}")
 
   # Generate alert-messages about congestion in links:
@@ -3211,7 +3219,7 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointN
 ##      alertCongestionInNetworks.append( absenceOfCongestionMessage )
 #      alertCongestionInNetwork = None
 #    for nodeID1 in inflowsByNodeID:
-#      i = pointcoordsandindexbyID[nodeID1]['index']
+#      i = pointCoordsIndexandPointIDbyMATsimID[nodeID1]['index']
 ##      if maxflow_dict[-1][i] < inflowsByNodeID[nodeID1]:
 #      if inflowsByNodeID_maxFlowSoln[nodeID1] < inflowsByNodeID[nodeID1]:
 ##        alertsNodesWhereDemandNotSatisfied[i] = f"ALERT: steady-state (i.e. consistent with flows found by maximum-flow method) injection-flow {maxflow_dict[-1][i]} into injection-node {nodeID1} is less than specified inflow {inflowsByNodeID[nodeID1]} there."
@@ -3247,7 +3255,7 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
 ##  (terminatorPressure, eps, eps_flowbalance, flowfunc, flowijfunc, derivijfunc, adjacency, N, exitnodes, injectionnodes, indexamonginjectionorexitnodes, neighboursThatCanFlowIntoj, hExitNodes, totalinflow, argsflowfunc, lK, linklength, v0, pointcoordsbyID) = setuptrafficflowproblem( JSONnetworkfilename, b0 )
 #  (terminatorPressure, eps, eps_flowbalance, flowfunc, flowijfunc, derivijfunc, adjacency, N, exitnodes, injectionnodes, indexamonginjectionorexitnodes, neighboursThatCanFlowIntoj, hExitNodes, argsflowfunc, pointcoordsbyID) = setuptrafficflowproblem( JSONnetworkfilename )
 #  (terminatorPressure, eps, flowfunc, flowijfunc, derivijfunc, adjacency, N, exitnodes, injectionnodes, indexamonginjectionorexitnodes, neighboursThatCanFlowIntoj, hExitNodes, argsflowfunc, pointcoordsbyID, linestringsWithCoords) = setuptrafficflowproblem( JSONnetworkfilename, exitnodes )
-  (terminatorPressure, eps, flowfunc, flowijfunc, derivijfunc, adjacency, N, exitnodes, injectionnodes, indexamonginjectionorexitnodes, neighboursThatCanReceiveFlowFromi, neighboursThatCanFlowIntoj, hExitNodes, argsflowfunc, pointcoordsandindexbyID, pointNodeIDbyIndex, linestringsWithCoords) = setuptrafficflowproblem( JSONnetworkfilename, exitnodes, SEMversion )
+  (terminatorPressure, eps, flowfunc, flowijfunc, derivijfunc, adjacency, N, exitnodes, injectionnodes, indexamonginjectionorexitnodes, neighboursThatCanReceiveFlowFromi, neighboursThatCanFlowIntoj, hExitNodes, argsflowfunc, pointCoordsIndexandPointIDbyMATsimID, pointNodeIDbyIndex, linestringsWithCoords) = setuptrafficflowproblem( JSONnetworkfilename, exitnodes, SEMversion )
 
 #  print("runSEM(): injectionnodes is", injectionnodes)
   if SEMversion in ('SEM2', 'SEM3', 'SEM4'):
@@ -3258,8 +3266,8 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
 #    for i in injectionnodes:
     for id in inflowsByNodeID:
 ##      b0[indexamonginjectionorexitnodes[id]] = inflowsByNodeID[id]
-#      print(f"pointcoordsandindexbyID['{id}'] is {pointcoordsandindexbyID[id]}")
-      b0[indexamonginjectionorexitnodes[ pointcoordsandindexbyID[id]['index'] ]] = inflowsByNodeID[ id ]
+#      print(f"pointCoordsIndexandPointIDbyMATsimID['{id}'] is {pointCoordsIndexandPointIDbyMATsimID[id]}")
+      b0[indexamonginjectionorexitnodes[ pointCoordsIndexandPointIDbyMATsimID[id]['index'] ]] = inflowsByNodeID[ id ]
     print("b0 (inflow at injection-nodes) is", b0)
     assert len(b0) == len(injectionnodes)
     print("Total inflow is sum(b0) =", sum(b0))
@@ -3279,9 +3287,9 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
 
   if SEMversion == 'SEM2':  # use Newton-Raphson or global optimiser, rather than finding shortest-path routes
     starttime = time.time()
-    injectionnodeindices = [pointcoordsandindexbyID[nodeID]['index'] for nodeID in pointcoordsandindexbyID if nodeID not in exitnodes]
+    injectionnodeindices = [pointCoordsIndexandPointIDbyMATsimID[nodeID]['index'] for nodeID in pointCoordsIndexandPointIDbyMATsimID if nodeID not in exitnodes]
     print(f"injectionnodeindices is {injectionnodeindices}")
-    exitnodeindices = [pointcoordsandindexbyID[nodeID]['index'] for nodeID in pointcoordsandindexbyID if nodeID in exitnodes]
+    exitnodeindices = [pointCoordsIndexandPointIDbyMATsimID[nodeID]['index'] for nodeID in pointCoordsIndexandPointIDbyMATsimID if nodeID in exitnodes]
     print(f"exitnodeindices is {exitnodeindices}")
 #    NEWTONRAPHSON = True  # use Newton-Raphson to find h satisfying f(h) = 0
     NEWTONRAPHSON = False  # use a (local- or global-) minimisation method to find the minimum of ||f(h)||^2
@@ -3455,7 +3463,7 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
 #  elif SEMversion == 'SEM3':  # don't use Newton-Raphson or global optimiser; instead find shortest-path routes
   elif SEMversion in ('SEM3', 'SEM4'):  # don't use Newton-Raphson or global optimiser; instead find shortest-path routes
 #    (nextNodeInShortestPath, shortestDistanceToAnyExit, shortestPathToExit, shortestPathToAnyExit, parentsOnShortestPathsFromInjectionNodes, qijatnodei, densityijatnodei, qijatnodej, flowstateijatnodej, timetorunShortestPathsAlgorithm, timetocalculateshortestpaths, lK, directedNeighboursInShortestPathTreeOfNode, assignedExitNodesReachedDownstreamOfArc) = findShortestPathsSEM3or4(N, argsflowfunc, injectionnodes, exitnodes, pointcoordsandindexbyID, subflowsToAssignedExitNodesByInjectionNodeID)
-    (nextNodeInShortestPath, shortestDistanceToAnyExit, shortestPathToExit, shortestPathToAnyExit, parentsOnShortestPathsFromInjectionNodes, qijatnodei, densityijatnodei, qijatnodej, flowstateijatnodej, timetorunShortestPathsAlgorithm, timetocalculateshortestpaths, lK, successorNodeOnShortestPathFromNodeToExitNode, assignedExitNodesReachedDownstreamOfArc) = findShortestPathsSEM3or4(N, argsflowfunc, injectionnodes, exitnodes, pointcoordsandindexbyID, subflowsToAssignedExitNodesByInjectionNodeID)
+    (nextNodeInShortestPath, shortestDistanceToAnyExit, shortestPathToExit, shortestPathToAnyExit, parentsOnShortestPathsFromInjectionNodes, qijatnodei, densityijatnodei, qijatnodej, flowstateijatnodej, timetorunShortestPathsAlgorithm, timetocalculateshortestpaths, lK, successorNodeOnShortestPathFromNodeToExitNode, assignedExitNodesReachedDownstreamOfArc) = findShortestPathsSEM3or4(N, argsflowfunc, injectionnodes, exitnodes, pointCoordsIndexandPointIDbyMATsimID, subflowsToAssignedExitNodesByInjectionNodeID)
 
     # Every vehicle flows along a shortest path from its injection-node to an exit-node, and the traffic-flow in the entire network is the sum of the flows along these shortest paths. 
 
@@ -3494,7 +3502,7 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
     elif SEMversion == 'SEM4':
       print(f"duration of simulation is {simulDuration} hours or {simulDuration*3600} seconds.")
 #      (cumulNumVehiclesToHaveDepartedLinkDuringSimulation, outflowsByNodeID, congestionAlertMessages) = evolutionofwaveandshockfrontsSEM4( inflowsandflowperiodsByNodeID, subflowsToAssignedExitNodesByInjectionNodeID, simulDuration, parentsOnShortestPathsFromInjectionNodes, qijatnodei, densityijatnodei, qijatnodej, densityijatnodej, speedijatnodej, flowstateijatnodej, argsflowfunc, exitnodes, b0, indexamonginjectionorexitnodes, shortestPathToAnyExit, shortestPathToExit, flowijfunc, flowfunc, injectionnodes, outflowsByNodeID, pointcoordsandindexbyID, pointNodeIDbyIndex, nextNodeInShortestPath, directedNeighboursInShortestPathTreeOfNode, assignedExitNodesReachedDownstreamOfArc )
-      (cumulNumVehiclesToHaveDepartedLinkDuringSimulation, outflowsByNodeID, congestionAlertMessages) = evolutionofwaveandshockfrontsSEM4( inflowsandflowperiodsByNodeID, subflowsToAssignedExitNodesByInjectionNodeID, simulDuration, parentsOnShortestPathsFromInjectionNodes, qijatnodei, densityijatnodei, qijatnodej, densityijatnodej, speedijatnodej, flowstateijatnodej, argsflowfunc, exitnodes, b0, indexamonginjectionorexitnodes, shortestPathToAnyExit, shortestPathToExit, flowijfunc, flowfunc, injectionnodes, outflowsByNodeID, pointcoordsandindexbyID, pointNodeIDbyIndex, nextNodeInShortestPath, successorNodeOnShortestPathFromNodeToExitNode, assignedExitNodesReachedDownstreamOfArc )
+      (cumulNumVehiclesToHaveDepartedLinkDuringSimulation, outflowsByNodeID, congestionAlertMessages) = evolutionofwaveandshockfrontsSEM4( inflowsandflowperiodsByNodeID, subflowsToAssignedExitNodesByInjectionNodeID, simulDuration, parentsOnShortestPathsFromInjectionNodes, qijatnodei, densityijatnodei, qijatnodej, densityijatnodej, speedijatnodej, flowstateijatnodej, argsflowfunc, exitnodes, b0, indexamonginjectionorexitnodes, shortestPathToAnyExit, shortestPathToExit, flowijfunc, flowfunc, injectionnodes, outflowsByNodeID, pointCoordsIndexandPointIDbyMATsimID, pointNodeIDbyIndex, nextNodeInShortestPath, successorNodeOnShortestPathFromNodeToExitNode, assignedExitNodesReachedDownstreamOfArc )
       print(f"congestionAlertMessages is '{congestionAlertMessages}'")
       timeaveragedflowsinlinksoverSimulDuration = {key: cumulNumVehiclesToHaveDepartedLinkDuringSimulation[key] / simulDuration for key in cumulNumVehiclesToHaveDepartedLinkDuringSimulation}
       assert len(outflowsByNodeID) == len(exitnodes)
@@ -3575,7 +3583,7 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
 
 ###            flowstateijatnodej  # is this important to have?
 #    (qij, totalAssignedSubflowsFromInjectionNode, maxflow_dict, outflowsByNodeID, alertCongestionInNetwork, alertsNodesWhereDemandNotSatisfied, alertsLinksPossiblyCausingCongestion, timeToRunMaximumFlowAlgorithm, timeToCalculateShortestPaths) = findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointNodeIDbyIndex, inflowsByNodeID, positivePopulationInsideFireByNodeID, subflowsToAssignedExitNodesByInjectionNodeID)
-    (qij, totalAssignedSubflowsFromInjectionNode, maxflow_dict, outflowsByNodeID, evacuationTimeByNodeID, criticalLinks, alertsNodesWhereDemandNotSatisfied, alertsLinksPossiblyCausingCongestion, timeToRunMaximumFlowAlgorithm, timeToCalculateShortestPaths) = findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointNodeIDbyIndex, positivePopulationInsideFireByNodeID, subflowsToAssignedExitNodesByInjectionNodeID)
+    (qij, totalAssignedSubflowsFromInjectionNode, maxflow_dict, outflowsByNodeID, evacuationTimeByNodeID, criticalLinks, alertsNodesWhereDemandNotSatisfied, alertsLinksPossiblyCausingCongestion, timeToRunMaximumFlowAlgorithm, timeToCalculateShortestPaths) = findMaximumFlowSEM5(argsflowfunc, exitnodes, pointCoordsIndexandPointIDbyMATsimID, pointNodeIDbyIndex, positivePopulationInsideFireByNodeID, subflowsToAssignedExitNodesByInjectionNodeID)
     print(f"evacuationTimeByNodeID is {evacuationTimeByNodeID}")
 #    print(f"alertCongestionInNetwork is '{alertCongestionInNetwork}'")
     print(f"alertsNodesWhereDemandNotSatisfied is {alertsNodesWhereDemandNotSatisfied}")
@@ -3593,11 +3601,10 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
 #  BBsouth = min([pointcoordsbyID[i][1] for i in range(N)])
 #  BBeast = max([pointcoordsbyID[i][0] for i in range(N)])
 #  BBnorth = max([pointcoordsbyID[i][1] for i in range(N)])
-#pointcoordsandindexbyID[pointDict['matsimID']] = {'coords': xy, 'index': pointDict['index']}
-  BBwest = min([pointcoordsandindexbyID[nodeID]['coords'][0] for nodeID in pointcoordsandindexbyID])  # bounding-box limits
-  BBsouth = min([pointcoordsandindexbyID[nodeID]['coords'][1] for nodeID in pointcoordsandindexbyID])
-  BBeast = max([pointcoordsandindexbyID[nodeID]['coords'][0] for nodeID in pointcoordsandindexbyID])
-  BBnorth = max([pointcoordsandindexbyID[nodeID]['coords'][1] for nodeID in pointcoordsandindexbyID])
+  BBwest = min([pointCoordsIndexandPointIDbyMATsimID[nodeID]['coords'][0] for nodeID in pointCoordsIndexandPointIDbyMATsimID])  # bounding-box limits
+  BBsouth = min([pointCoordsIndexandPointIDbyMATsimID[nodeID]['coords'][1] for nodeID in pointCoordsIndexandPointIDbyMATsimID])
+  BBeast = max([pointCoordsIndexandPointIDbyMATsimID[nodeID]['coords'][0] for nodeID in pointCoordsIndexandPointIDbyMATsimID])
+  BBnorth = max([pointCoordsIndexandPointIDbyMATsimID[nodeID]['coords'][1] for nodeID in pointCoordsIndexandPointIDbyMATsimID])
   print(f"BBwest {BBwest}, BBsouth {BBsouth}, BBeast {BBeast}, BBnorth {BBnorth}")
   outputGeoJSON["bbox"] = [BBwest, BBsouth, BBeast, BBnorth]
   outputGeoJSON["features"] = []
@@ -3613,13 +3620,15 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
     print("nonzeroinflowsByNodeID is", nonzeroinflowsByNodeID)
     print(f"len(nonzeroinflowsByNodeID) is {len(nonzeroinflowsByNodeID)}.")
 
-##  print("sorted( pointcoordsandindexbyID.keys() ) is", sorted( pointcoordsandindexbyID.keys() ) )
-#  for nodeID in sorted( pointcoordsbyID.keys() ):
-  for nodeID in sorted( pointcoordsandindexbyID.keys() ):
+##  print("sorted( pointCoordsIndexandPointIDbyMATsimID.keys() ) is", sorted( pointCoordsIndexandPointIDbyMATsimID.keys() ) )
+##  for nodeID in sorted( pointcoordsbyID.keys() ):
+  for nodeID in sorted( pointCoordsIndexandPointIDbyMATsimID.keys() ):
+#  for (nodeID, nodeproperties) in sorted( pointCoordsIndexandPointIDbyMATsimID.items() ):  # TODO: is this incorrect? Might need to restore the line above
+#  for (linkcoords, linkproperties) in linestringsWithCoords.items():  # 'linkcoords' is a two-tuple of two-tuples
     pointJSON = {}
     pointJSON["geometry"] = {}
 #    pointJSON["geometry"]["coordinates"] = list(pointcoordsbyID[nodeID])
-    pointJSON["geometry"]["coordinates"] = list(pointcoordsandindexbyID[nodeID]['coords'])
+    pointJSON["geometry"]["coordinates"] = list(pointCoordsIndexandPointIDbyMATsimID[nodeID]['coords'])
     pointJSON["geometry"]["type"] = "Point"
     pointJSON["properties"] = {}
 #    print(f"injectionnodes[:6] is {injectionnodes[:6]}")
@@ -3628,14 +3637,16 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
       if SEMversion in ('SEM1', 'SEM2', 'SEM3', 'SEM4'):
         pointJSON["properties"]["inflow"] = inflowsByNodeID[nodeID]
       elif SEMversion == 'SEM5':
-        i = pointcoordsandindexbyID[nodeID]['index']
+        i = pointCoordsIndexandPointIDbyMATsimID[nodeID]['index']
+        GeostackPointID = pointCoordsIndexandPointIDbyMATsimID[nodeID]['pointID']
 ##        if i in totalAssignedSubflowsFromInjectionNode:
 #        if nodeID in nonzeroinflowsByNodeID:
         if nodeID in positivePopulationInsideFireByNodeID:
           pointJSON["properties"]["population"] = positivePopulationInsideFireByNodeID[nodeID]
 #          print(f"maxflow_dict[-1][{i}] is {maxflow_dict[-1][i]}")
           pointJSON["properties"]["inflow"] = maxflow_dict[-1][i]
-          pointJSON["properties"]["evacuationTime"] = evacuationTimeByNodeID[nodeID]
+#          pointJSON["properties"]["evacuationTime"] = evacuationTimeByNodeID[nodeID]
+          pointJSON["properties"]["evacuationTime"] = evacuationTimeByNodeID[nodeID, GeostackPointID]
         else:
           pointJSON["properties"]["inflow"] = 0.0
           # Population is zero at this node, so "evacuationTime" is undefined
@@ -3643,20 +3654,20 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
 #          pointJSON["properties"]["evacuationTime"] = -1  # indicates zero population and therefore zero demanded inflow at this node; is a number rather than a string so that QGIS can depict 'evacuationTime' with a graduated colour-scale
       if SEMversion == 'SEM2':  # Newton-Raphson or the global optimiser was used
 #        pointJSON["properties"]["head"] = hInjectionNodes[indexamonginjectionorexitnodes[nodeID]]
-        pointJSON["properties"]["head"] = hInjectionNodes[indexamonginjectionorexitnodes[pointcoordsandindexbyID[nodeID]['index']]]
+        pointJSON["properties"]["head"] = hInjectionNodes[indexamonginjectionorexitnodes[pointCoordsIndexandPointIDbyMATsimID[nodeID]['index']]]
       if SEMversion == 'SEM5':
-        i = pointcoordsandindexbyID[nodeID]['index']
+        i = pointCoordsIndexandPointIDbyMATsimID[nodeID]['index']
         if i in alertsNodesWhereDemandNotSatisfied:
           pointJSON["properties"]["alert"] = alertsNodesWhereDemandNotSatisfied[i]
     else:  # the current node is an exit-node
       if SEMversion in ('SEM1', 'SEM2'):  # Newton-Raphson or the global optimiser was used
-        pointJSON["properties"]["inflow"] = outflowsByNodeID[pointcoordsandindexbyID[nodeID]['index']]
+        pointJSON["properties"]["inflow"] = outflowsByNodeID[pointCoordsIndexandPointIDbyMATsimID[nodeID]['index']]
 #      else:
       elif SEMversion in ('SEM3', 'SEM4', 'SEM5'):
         pointJSON["properties"]["inflow"] = outflowsByNodeID[nodeID]
       if SEMversion == 'SEM2':  # Newton-Raphson or the global optimiser was used
 #        pointJSON["properties"]["head"] = hExitNodes[indexamonginjectionorexitnodes[nodeID]]
-        pointJSON["properties"]["head"] = hExitNodes[indexamonginjectionorexitnodes[pointcoordsandindexbyID[nodeID]['index']]]
+        pointJSON["properties"]["head"] = hExitNodes[indexamonginjectionorexitnodes[pointCoordsIndexandPointIDbyMATsimID[nodeID]['index']]]
 #    pointJSON["properties"]["id"] = nodeID
     pointJSON["properties"]["matsim_nodeID"] = nodeID
     pointJSON["properties"]["type"] = 0  # TODO: is the "type" property always 0 for a Point?
@@ -3721,10 +3732,10 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
 #          if fireBounds.bbox_contains_coordinate:
           if BoundingBox.boundingBoxContains(fireBounds, BoundingBox([[w,s],[e,n]])):
             linkJSON["properties"]["isCritical"] = 1
-#            criticalLinksInsideFireBoundingBox.append( (nodeIDa,nodeIDb) )
-#        linestringsWithCoords[key]['matsim_linkID']
-#    linkproperties['matsim_linkID']
-            criticalLinksInsideFireBoundingBox.append( linkproperties['matsim_linkID'] )
+##            criticalLinksInsideFireBoundingBox.append( (nodeIDa,nodeIDb) )
+##        linestringsWithCoords[key]['matsim_linkID']
+#            criticalLinksInsideFireBoundingBox.append( linkproperties['matsim_linkID'] )
+            criticalLinksInsideFireBoundingBox.append( (linkproperties['matsim_linkID'], linkproperties['lineStringID']) )
 #            print("Link is inside fireBounds.")
           else:
             linkJSON["properties"]["isCritical"] = 0
@@ -3975,21 +3986,21 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
       print("type(pos) is {type(pos)}")
     try:
 #      assert len(pos) == len(pointcoordsbyID)
-      assert len(pos) == len(pointcoordsandindexbyID)
+      assert len(pos) == len(pointCoordsIndexandPointIDbyMATsimID)
     except:
-      print(f"WARNING: len(pos) is {len(pos)}, len(pointcoordsandindexbyID) is {len(pointcoordsandindexbyID)}, which are not equal: a potential problem or not?")
+      print(f"WARNING: len(pos) is {len(pos)}, len(pointCoordsIndexandPointIDbyMATsimID) is {len(pointCoordsIndexandPointIDbyMATsimID)}, which are not equal: a potential problem or not?")
 #      raise
 
 ##    assert set(pos.keys()) == set(pointcoordsbyID.keys())
 #    print(f"set(pos.keys()) is {set(pos.keys())}")
-#    print(f"pointcoordsandindexbyID.keys() is {pointcoordsandindexbyID.keys()}")
-##    assert set(pos.keys()) == set(pointcoordsandindexbyID.keys())
-#    assert len(pos.keys()) == len(pointcoordsandindexbyID.keys())
+#    print(f"pointCoordsIndexandPointIDbyMATsimID.keys() is {pointCoordsIndexandPointIDbyMATsimID.keys()}")
+##    assert set(pos.keys()) == set(pointCoordsIndexandPointIDbyMATsimID.keys())
+#    assert len(pos.keys()) == len(pointCoordsIndexandPointIDbyMATsimID.keys())
 
 #    for nodeID in pointcoordsbyID:  # set the nodes' positions
 #      pos[nodeID] = np.array( pointcoordsbyID[nodeID] )
-    for nodeID in pointcoordsandindexbyID:  # set the nodes' positions
-      pos[ pointcoordsandindexbyID[nodeID]['index'] ] = np.array( pointcoordsandindexbyID[nodeID]['coords'] )
+    for nodeID in pointCoordsIndexandPointIDbyMATsimID:  # set the nodes' positions
+      pos[ pointCoordsIndexandPointIDbyMATsimID[nodeID]['index'] ] = np.array( pointCoordsIndexandPointIDbyMATsimID[nodeID]['coords'] )
 ###    plt.figure(1, figsize=(9,5))
 ##    plt.figure(figsize=(9,5))
 #    fig, ax = plt.subplots(figsize=(9,5))  # for report
