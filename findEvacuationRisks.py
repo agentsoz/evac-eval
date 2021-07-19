@@ -117,8 +117,8 @@ def findRisks(cfgJson):
   allFires_proj = fire.getProjectionParameters()
 #  print(f"allFires_proj is {allFires_proj}")
   allFires_bounds = fire.getBounds()
-#  allFires_bounds.extend(20000.0)  # extend bounds of the fire layer by 20 km; TODO: the purpose of this extension is to cover all fires; in general, it might be better to calculate a union of the fire-rasters
-  allFires_bounds.extend(FIRE_BOUNDS_EXTENSION)  # extend bounds of the fire layer by 20 km; TODO: the purpose of this extension is to cover all fires; in general, it might be better to calculate a union of the fire-rasters
+#  allFires_bounds.extend(20000.0)  # extend bounds of the fire layer by 20 km
+  allFires_bounds.extend(FIRE_BOUNDS_EXTENSION_m)  # extend bounds of the fire layer; TODO: the purpose of this extension is to cover all fires; in general, it might be better to calculate a union of the fire-rasters
 
   # Read road-network vector-layer:
   print(f"Reading road-network data from {JSONnetworkfilename} ...")
@@ -134,8 +134,8 @@ def findRisks(cfgJson):
   print(f"network_bounds is {network_bounds}")
   assert network_bounds == allFires_bounds
 
-  networkBounds0 = roadNetwork.getBounds()
-  print(f"roadNetwork.getBounds() is {networkBounds0}")
+#  networkBounds0 = roadNetwork.getBounds()
+#  print(f"roadNetwork.getBounds() is {networkBounds0}")
 
   network_bounds = network_bounds.convert(network_proj, allFires_proj)
   print(f"network_bounds after conversion to network_proj is {network_bounds}")
@@ -242,8 +242,8 @@ def findRisks(cfgJson):
 ##  evacuationLayers = ('modelinputsMtAlexander_100a/sem/20181109_mountalex_evac_ffdi100a_grid.tif', )  # just one fire, for simplicity
 ##  evacuationLayers = ('modelinputsMtAlexander_100a/sem/20181109_mountalex_evac_ffdi100a_grid.tif', 'modelinputsMtAlexander_100b/sem/20181109_mountalex_evac_ffdi100b_grid.tif')
 ##  for evacuationLayer in evacuationLayers:
-  evacuationScenarios = ('a', 'b', 'c', 'd')  # fires ffdi100a, ffdi100b, ...
-#  evacuationScenarios = ('a', )  # the single fire ffdi100a
+#  evacuationScenarios = ('a', 'b', 'c', 'd')  # fires ffdi100a, ffdi100b, ...
+  evacuationScenarios = ('a', )  # the single fire ffdi100a
   for fireName in evacuationScenarios:
     evacuationLayer = f'modelinputsMtAlexander_100{fireName}/sem/20181109_mountalex_evac_ffdi100{fireName}_grid.tif'
     print(f"################# Reading currentFire data from {evacuationLayer}...")
@@ -643,7 +643,6 @@ def findRisks(cfgJson):
       f.write(vectorToGeoJson(roadNetwork))
 #    networkBounds_clippedToAllFires = roadNetwork.getBounds()  # is in wrong projection
 #    print(f"networkBounds_clippedToAllFires is {networkBounds_clippedToAllFires}")
-    print(f"networkBounds1 is {networkBounds1}")
 
     elapsedTime = time()
     print(f"findEvacuationRisks.py has run for {elapsedTime - startTime} seconds so far.")
@@ -665,9 +664,13 @@ def findRisks(cfgJson):
     print(f"SEMversion is {SEMversion}.")
 ##    inflowsByNodeID = {'matsimnode0': 700, 'matsimnode1': 500}
 #    inflowsByNodeID = getInjectionNodesandInflows()  # injection-nodes must be inside currentFire's perimeter; for now, this is defined above by hand
+    inflowsByNodeID = None  # not needed for SEM5
     inflowsandflowperiodsByNodeID = None  # not needed for SEM5
-##    exitnodes = {'matsimnode5', 'matsimnode8'}
-#    exitnodes = getExitNodes()
+
+    positivePopulationInsideFireByNodeID = {'259608426': 6.0}  # one population-ode, for debugging only
+##    exitnodes = {'matsimnode5', 'matsimnode8'}  # two exit-nodes, for debugging only
+    exitnodes = {'1681513618'}  # one exit-node, for debugging only
+
     subflowsToAssignedExitNodesByInjectionNodeID = simulDurationInHours = None
     print(f"JSONnetworkfilename is {JSONnetworkfilename}")
 #    SEMoutputGeoJSON = solversSEMversions.runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperiodsByNodeID, exitnodes, subflowsToAssignedExitNodesByInjectionNodeID, simulDurationInHours)
@@ -677,7 +680,7 @@ def findRisks(cfgJson):
     print(f"currentFireBounds is {currentFireBounds}.")
     currentFireBounds = currentFireBounds.convert(network_proj, allFires_proj)  # convert currentFireBounds to the roadNetwork projection
     print(f"currentFireBounds converted to roadNetwork projection is {currentFireBounds}.")
-    (maxFlowSolnGeoJSON, criticalLinksInsideFireBoundingBox, evacuationTimeByNodeID) = solversSEMversions.runSEM( SEMversion, exitNodesAtSafeDistfilename, inflowsByNodeID, inflowsandflowperiodsByNodeID, exitnodes, positivePopulationInsideFireByNodeID, currentFireBounds, subflowsToAssignedExitNodesByInjectionNodeID, simulDurationInHours)  # run SEM version on the roadNetwork as clipped to 'allFires' bounds
+    (maxFlowSolnGeoJSON, criticalLinksInsideFireBoundingBox, evacuationTimeByNodeID) = solversSEMversions.runSEM( SEMversion, exitNodesAtSafeDistfilename, inflowsByNodeID, inflowsandflowperiodsByNodeID, exitnodes, positivePopulationInsideFireByNodeID, currentFireBounds, subflowsToAssignedExitNodesByInjectionNodeID, simulDurationInHours)  # run SEM version on the roadNetwork 'exitNodesAtSafeDistfilename', as this has been clipped to the 'allFires' bounds
 
 #    print(f"Reading roadNetwork data from {maxFlowSolnGeoJSON} into a vector ...")
 #    network_maxFlowSoln = geoJsonToVector(maxFlowSolnGeoJSON)
@@ -798,8 +801,8 @@ def findRisks(cfgJson):
   ignitionRisk.setProjectionParameters(allFires_proj)
   ignitionRisk.setAllCellValues(0)
   # Read all fire-layers to create 'ignitionRisk' layer:
-  allFireNames = ('a', 'b', 'c', 'd')  # fires ffdi100a, ffdi100b, ...
-  for fireName in allFireNames:
+#  for fireName in allFireNames:
+  for fireName in evacuationScenarios:
     evacuationLayer = f'modelinputsMtAlexander_100{fireName}/sem/20181109_mountalex_evac_ffdi100{fireName}_grid.tif'
     print(f"Reading fire data from {evacuationLayer}...")
     if pth.splitext(evacuationLayer)[-1].lower() in ['.tif', '.asc', '.gsr', '.flt']:  # use native raster-readers:

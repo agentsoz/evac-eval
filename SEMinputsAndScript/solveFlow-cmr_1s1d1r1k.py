@@ -37,7 +37,7 @@ print(f"SEMversion is {SEMversion}.")
 #SCENARIO = 'testdata'
 #SCENARIO = 'onenodenetwork'  # a test-case, as the scenario with one node and no links ought to fail; this is because the number of injection-nodes is required to be both greater than zero and fewer than the total number of nodes, which makes it impossible to consistently define a set of injection-nodes in the one-node case
 #SCENARIO = 'twonodenetwork'
-#SCENARIO = 'threenodelinearnetwork'
+SCENARIO = 'threenodelinearnetwork'
 ##SCENARIO = 'threenodelinearnetworkFalseNegativeSEM2'
 #SCENARIO = 'threenodelinearnetworkSEM2cannotSendSubflowsToAssignedExitNodes'
 #SCENARIO = 'threenodenetworkSEM2cannotSendSubflowsToAssignedExitNodes'  # bad example, as only solution is to split assigned subflow from 2 to 0 into two different paths
@@ -57,7 +57,7 @@ print(f"SEMversion is {SEMversion}.")
 #SCENARIO = 'cmr_1s1d1r'
 #SCENARIO = 'cmr_3s2d'  # if with total inflows of 3005, called 'cmr_3s2d3k'
 #SCENARIO = 'cmr1full'  # scenario with full Castlemaine population?
-SCENARIO = 'sixnodeTwoWayLink'
+#SCENARIO = 'sixnodeTwoWayLink'
 
 def extractAssignedSubflowsFromCSV( populationArchetypesCSVfile ):
 #  subflowsToAssignedExitNodesByInjectionNodeID = {'258070680': {'977389105': 500, '236395531': 500}, '259608655': {'977389105': 500, '236395531': 500}, '60303151': {'977389105': 500, '236395531': 505}}
@@ -109,10 +109,12 @@ elif SCENARIO == 'twonodenetwork':
   exitnodes = {'matsimnode1'}
 
 elif SCENARIO == 'threenodelinearnetwork':
-  JSONnetworkfilename = 'threenodelinearnetworkMissingEndpoint.geojson'  # three-node network with rightmost node missing
+#  JSONnetworkfilename = 'threenodelinearnetworkMissingEndpoint.geojson'  # three-node network with rightmost node missing
+  JSONnetworkfilename = 'threenodelinearnetwork.geojson'
 #  inflowsByNodeID = {0: 500}
-#  inflowsByNodeID = {0: 1000}
-  inflowsByNodeID = {'matsimnode0': 1000}
+#  inflowsByNodeID = {'matsimnode0': 1000}
+  inflowsByNodeID = {'matsimnode0': 17, 'matsimnode1': 6}
+  positivePopulationInsideFireByNodeID = {'matsimnode0': 17, 'matsimnode1': 6}
   subflowsToAssignedExitNodesByInjectionNodeID = {'matsimnode0': {'matsimnode2': 1000}}
   exitnodes = {'matsimnode2'}
 
@@ -191,7 +193,8 @@ elif SCENARIO == 'fournodetree':
 #  JSONnetworkfilename = 'fournodetreeFourthNodedeleted.geojson'
   JSONnetworkfilename = 'fournodetree.geojson'
 ##  inflowsByNodeID = {1: 200, 3: 100}  # desired labelling of nodes
-#  inflowsByNodeID = {0: 200, 1: 100}  # to conform with default node-labelling that begins at 0; TODO: improve this so that labels can be any integers not necessarily including zero?
+#  inflowsByNodeID = {0: 200, 1: 100}  # to conform with default node-labelling that begins at 0
+  # A node-label can now be any integer or string.
   inflowsByNodeID = {'matsimnode0': 300, 'matsimnode1': 400, 'matsimnode2': 100}
 #  inflowsByNodeID = {0: 200, 1: 401}
   exitnodes = {'matsimnode3'}
@@ -313,7 +316,12 @@ if SEMversion == 'SEM1':
 
 
 elif SEMversion in ('SEM2', 'SEM3', 'SEM4', 'SEM5'):
-  outputGeoJSON = solversSEMversions.runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperiodsByNodeID, exitnodes, subflowsToAssignedExitNodesByInjectionNodeID, simulDurationInHours)
+##  outputGeoJSON = solversSEMversions.runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperiodsByNodeID, exitnodes, subflowsToAssignedExitNodesByInjectionNodeID, simulDurationInHours)
+#    (maxFlowSolnGeoJSON, criticalLinksInsideFireBoundingBox, evacuationTimeByNodeID) = solversSEMversions.runSEM( SEMversion, exitNodesAtSafeDistfilename, inflowsByNodeID, inflowsandflowperiodsByNodeID, exitnodes, positivePopulationInsideFireByNodeID, currentFireBounds, subflowsToAssignedExitNodesByInjectionNodeID, simulDurationInHours)  # run SEM version on the roadNetwork as clipped to 'allFires' bounds
+  if SEMversion == 'SEM5':
+    subflowsToAssignedExitNodesByInjectionNodeID = None
+  currentFireBounds = None  # 'currentFireBounds' not needed for debugging; TODO: define these bounds properly if need to mark as critical only those critical links that are inside a specified fire
+  (outputGeoJSON, criticalLinksInsideFireBoundingBox, evacuationTimeByNodeID) = solversSEMversions.runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperiodsByNodeID, exitnodes, positivePopulationInsideFireByNodeID, currentFireBounds, subflowsToAssignedExitNodesByInjectionNodeID, simulDurationInHours)  # run SEM version on the roadNetwork as clipped to 'allFires' bounds
 
 
 #for idLS in network.getLineStringIndexes():  # ST: provide an ID for each link, that assigned by the internal network - but (COMPLETED) need each link's MATSIM ID as used within the ABM

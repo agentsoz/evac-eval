@@ -345,7 +345,7 @@ def setuptrafficflowproblem( JSONnetworkfilename, exitnodes, SEMversion ):
 #    for edge in numlanes.keys():
 ###      phi[edge] = omega1_carsperkmperlane / math.log(lK[edge]/1)  # first attempt at calculating phi, which is probably incorrect
 ##      if lK[edge] == 50:
-##        phi[edge] = 27.488  # TODO: implement in Python the Octave code that was used to calculate these two values, so that we'll have access to a value of phi for any arbitrary value of lK
+##        phi[edge] = 27.488  # DONE: implement in Python the Octave code that was used to calculate these two values, so that we'll have access to a value of phi for any arbitrary value of lK
 ##      elif lK[edge] == 100:
 ##        phi[edge] = 23.362
 #      phi[edge] = phiOnLinkrs_inVehiclesPerKmPerLane( lK[edge], meanMinGapinStoppedTraffic_Km, meanVehicleLength_Km )
@@ -757,7 +757,7 @@ def triangularderivfunc(hval, i, j, argsflowfunc):
 ##    return -numlanes_current/(T*maximumdensityperlane)
 #    return -1/(T*numlanes_current*maximumdensityperlane)
     return -1/(T_current*numlanes_current*maximumdensityperlane)
-  # TODO: return what if hval > numlanes_current*maximumdensityperlane ?
+  # TODO: if hval > numlanes_current*maximumdensityperlane, return what?
 
 
 
@@ -2908,12 +2908,13 @@ def findShortestPathsSEM5(argsflowfunc, exitnodes, pointCoordsIndexandPointIDbyM
 #def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, pointNodeIDbyIndex, inflowsByNodeID, positivePopulationInsideFireByNodeID, subflowsToAssignedExitNodesByInjectionNodeID):
 def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointCoordsIndexandPointIDbyMATsimID, pointNodeIDbyIndex, positivePopulationInsideFireByNodeID, subflowsToAssignedExitNodesByInjectionNodeID):
 # Uses Edmonds-Karp maximum-flow algorithm?
-# TODO: maximum-flow method can't handle parallel arcs, so must replace each two-way edge, i.e. pair of arcs in opposite directions, by adding a dummy node; see p. 711 of 'Introduction to Algorithms', third edition.
+# Maximum-flow method can't handle parallel arcs, so must replace each two-way edge, i.e. pair of arcs in opposite directions, by adding a dummy node; see p. 711 of 'Introduction to Algorithms', third edition.
   starttime = time.time()
   EPS = 1e-6
   INFINITY = 9999999.9  # TODO: is this sufficiently large?
   FINDMAXIMUMFLOWONSHORTESTPATHARCSONLY = False  #  in calculation of maximum flow, use all arcs of the graph
 #  FINDMAXIMUMFLOWONSHORTESTPATHARCSONLY = True  #  in calculation of maximum flow, use only the arcs that appear on shortest paths; can take a prohibitively long time if there are many injection- and exit-nodes.
+  print(f"positivePopulationInsideFireByNodeID is {positivePopulationInsideFireByNodeID}.")
   alertsNodesWhereDemandNotSatisfied = {}
   alertsLinksPossiblyCausingCongestion = {}
   arcs = []
@@ -2981,9 +2982,11 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointCoordsIndexandPointIDbyMAT
 
 ##  print("Gmaximumflow.nodes() is %s" % Gmaximumflow.nodes())
 ##  print("Gmaximumflow.edges() is %s" % Gmaximumflow.edges())
+#  nodeID_possiblebug = '97560366'  # for debugging: this node appears to violate the flow-conservation constraint
 #  nodeID_possiblebug = '728021001'  # for debugging: this node appears to violate the flow-conservation constraint
 #  nodeID_possiblebug = '259608426'  # for debugging: has inflow of 4000
-  nodeID_possiblebug = '259608572'  # for debugging: has inflow of 0
+#  nodeID_possiblebug = '259608572'  # for debugging: has inflow of 0
+  nodeID_possiblebug = None
   REPLACEANTIPARALLELARCS = False
 #  REPLACEANTIPARALLELARCS = True
   if REPLACEANTIPARALLELARCS:
@@ -3007,7 +3010,7 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointCoordsIndexandPointIDbyMAT
       Gmaximumflow.add_edges_from( [(v,dummyNode), (dummyNode,u)] )
       Gmaximumflow.edges[v,dummyNode]['capacity'] = argsflowfunc['linkcapacity'][frozenset({u,v})]  # assume the capacity of each two-way link is the same in either direction
       Gmaximumflow.edges[dummyNode,u]['capacity'] = argsflowfunc['linkcapacity'][frozenset({u,v})]
-      if u == pointCoordsIndexandPointIDbyMATsimID[nodeID_possiblebug]['index']:
+      if nodeID_possiblebug and u == pointCoordsIndexandPointIDbyMATsimID[nodeID_possiblebug]['index']:
         print(f"Gmaximumflow.edges[{v},{dummyNode}]['capacity'] is {Gmaximumflow.edges[v,dummyNode]['capacity']}")
     endtime_replaceAntiParallelArcs = time.time()
     timeToReplaceAntiParallelArcs = endtime_replaceAntiParallelArcs - starttime_replaceAntiParallelArcs
@@ -3052,10 +3055,12 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointCoordsIndexandPointIDbyMAT
 #    for nodeID1 in inflowsByNodeID:  # only to the injection-nodes with positive inflows do we need to add arcs from the super-source node '-1'
     for nodeID1 in positivePopulationInsideFireByNodeID:  # only to the injection-nodes with positive inflows do we need to add arcs from the super-source node '-1'
       i = pointCoordsIndexandPointIDbyMATsimID[nodeID1]['index']
-##      print(f"inflowsByNodeID[{nodeID1}] is {inflowsByNodeID[nodeID1]}: adding arc of that capacity from super-source (node '-1') to node {i}.")  # incorrect: arc from super-source to injection-node should have infinite capacity
-##      Gmaximumflow.add_edge(-1, i, capacity=inflowsByNodeID[nodeID1])  # -1 is source-node
-#      print(f"Adding arc of 'infinite' capacity {INFINITY} from super-source (node '-1') to node {i}.")
+###      print(f"inflowsByNodeID[{nodeID1}] is {inflowsByNodeID[nodeID1]}: adding arc of that capacity from super-source (node '-1') to node {i}.")
+###      Gmaximumflow.add_edge(-1, i, capacity=inflowsByNodeID[nodeID1])  # -1 is source-node
+##      print(f"Adding arc of 'infinite' capacity {INFINITY} from super-source (node '-1') to node {i}.")  # if flow is measured in population per hour, then there's no natural upper limit on the flow-rate from an injection-node into the network, other than the road-links' flow-capacities which are enforced anyway by the maximum-flow method, so an arc from super-source to injection-node effectively has infinite capacity
       Gmaximumflow.add_edge(-1, i, capacity=INFINITY)  # -1 is super-source node
+#      print(f"positivePopulationInsideFireByNodeID[{nodeID1}] is {positivePopulationInsideFireByNodeID[nodeID1]}: adding arc of that capacity from super-source (node '-1') to node {i}.")
+#      Gmaximumflow.add_edge(-1, i, capacity=positivePopulationInsideFireByNodeID[nodeID1])  # -1 is source-node
     for nodeID2 in exitnodes:
       j = pointCoordsIndexandPointIDbyMATsimID[nodeID2]['index']
 #      print(f"Adding arc of 'infinite' capacity {INFINITY} from node {j} to super-sink (node '-2').")
@@ -3085,13 +3090,13 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointCoordsIndexandPointIDbyMAT
       Gmaximumflow.remove_node(dummyNode)
       Gmaximumflow.edges[v,u]['capacity'] = argsflowfunc['linkcapacity'][frozenset({u,v})]  # assume the capacity of each two-way link is the same in either direction
       assert qij[v,dummyNode] == qij[dummyNode,u]
-      if u == pointCoordsIndexandPointIDbyMATsimID[nodeID_possiblebug]['index']:
+      if nodeID_possiblebug and u == pointCoordsIndexandPointIDbyMATsimID[nodeID_possiblebug]['index']:
         print(f"Before removal of dummyNode {dummyNode} and restoration of original antiparallel arc ({v},{u}), qij[{v},{dummyNode}] is {qij[v,dummyNode]}, qij[{dummyNode},{u}] is {qij[dummyNode,u]}.")
       qij[v,u] = qij[v,dummyNode]
       del qij[v,dummyNode]
       del qij[dummyNode,u]
 #    print("After restoration of every parallel arc and removal of its dummy-node, Gmaximumflow.nodes() is %s" % Gmaximumflow.nodes())
-      if u == pointCoordsIndexandPointIDbyMATsimID[nodeID_possiblebug]['index']:
+      if nodeID_possiblebug and u == pointCoordsIndexandPointIDbyMATsimID[nodeID_possiblebug]['index']:
         print(f"After removal of dummyNode {dummyNode} and restoration of original antiparallel arc ({v},{u}), qij[{v},{u}] is {qij[v,u]} and qij[{u},{v}] is {qij[u,v]}.")
 #  print("Gmaximumflow.edges() is %s" % Gmaximumflow.edges())
 #  for u, v in Gmaximumflow.edges():
@@ -3142,17 +3147,19 @@ def findMaximumFlowSEM5(argsflowfunc, exitnodes, pointCoordsIndexandPointIDbyMAT
 #    nodeIDb = pointNodeIDbyIndex[b]
 #    print(f"qij[{repr(nodeIDa)},{repr(nodeIDb)}] is {qij[a,b]}")
 
-#  nodeID_possiblebug = '97560366'  # for debugging: this node appears to violate the flow-conservation constraint
-  j = pointCoordsIndexandPointIDbyMATsimID[nodeID_possiblebug]['index']
-  coordsOfj = pointCoordsIndexandPointIDbyMATsimID[nodeID_possiblebug]['coords']
-  pointIDofj = pointCoordsIndexandPointIDbyMATsimID[nodeID_possiblebug]['pointID']
-  print(f"Node with MATsim ID {repr(nodeID_possiblebug)} has index {j}, coords {coordsOfj}, and Geostack pointID {pointIDofj}.")
+  if nodeID_possiblebug:
+    j = pointCoordsIndexandPointIDbyMATsimID[nodeID_possiblebug]['index']
+    coordsOfj = pointCoordsIndexandPointIDbyMATsimID[nodeID_possiblebug]['coords']
+    pointIDofj = pointCoordsIndexandPointIDbyMATsimID[nodeID_possiblebug]['pointID']
+    print(f"Node with MATsim ID {repr(nodeID_possiblebug)} has index {j}, coords {coordsOfj}, and Geostack pointID {pointIDofj}.")
+
   if FINDMAXIMUMFLOWONSHORTESTPATHARCSONLY:
     arcsInGmaximumflow = arcsInShortestPaths
   else:
     arcsInGmaximumflow = arcs
+
   for (a,b) in arcsInGmaximumflow:
-    if j in (a,b):
+    if nodeID_possiblebug and j in (a,b):
       nodeIDa = pointNodeIDbyIndex[a]
       nodeIDb = pointNodeIDbyIndex[b]
       print(f"Arc ({a},{b}) = ({repr(nodeIDa)},{repr(nodeIDb)}) is adjacent to node {j} = {repr(nodeID_possiblebug)}.")
@@ -3577,7 +3584,7 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
 
 
   elif SEMversion == 'SEM5':  # find the paths that maximise flow through the network
-###    (nextNodeInShortestPath, shortestDistanceToAnyExit, shortestPathToExit, shortestPathToAnyExit, parentsOnShortestPathsFromInjectionNodes, qijatnodei, densityijatnodei, qijatnodej, flowstateijatnodej, timetorunShortestPathsAlgorithm, timetocalculateshortestpaths, lK) = findShortestPathsSEM3or4(N, argsflowfunc, injectionnodes, exitnodes, pointcoordsandindexbyID, subflowsToAssignedExitNodesByInjectionNodeID)  # TODO: this will be too slow: replace with Dijkstra's algorithm
+###    (nextNodeInShortestPath, shortestDistanceToAnyExit, shortestPathToExit, shortestPathToAnyExit, parentsOnShortestPathsFromInjectionNodes, qijatnodei, densityijatnodei, qijatnodej, flowstateijatnodej, timetorunShortestPathsAlgorithm, timetocalculateshortestpaths, lK) = findShortestPathsSEM3or4(N, argsflowfunc, injectionnodes, exitnodes, pointcoordsandindexbyID, subflowsToAssignedExitNodesByInjectionNodeID)  # this will be too slow: replace with Dijkstra's algorithm
 ##    (nextNodeInShortestPath, shortestDistanceToAnyExit, shortestPathToExit, shortestPathToAnyExit, parentsOnShortestPathsFromInjectionNodes, qijatnodei, densityijatnodei, qijatnodej, flowstateijatnodej, timetorunShortestPathsAlgorithm, timetocalculateshortestpaths, lK) = findShortestPathsSEM5(N, argsflowfunc, injectionnodes, exitnodes, pointcoordsandindexbyID, subflowsToAssignedExitNodesByInjectionNodeID)
 #    (nextNodeInShortestPath, shortestDistanceToAnyExit, shortestPathToExit, shortestPathToAnyExit, parentsOnShortestPathsFromInjectionNodes, qijatnodei, densityijatnodei, qijatnodej, flowstateijatnodej, timetorunShortestPathsAlgorithm, timetocalculateshortestpaths, lK) = findShortestPathsSEM5(argsflowfunc, exitnodes, pointcoordsandindexbyID, subflowsToAssignedExitNodesByInjectionNodeID)
 
@@ -3715,6 +3722,8 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
         linkJSON["properties"]["flow"] = 0.0  # indicates this link isn't used in the maximum-flow solution, but is a number so that QGIS can depict 'flow' with a graduated colour-scale
 
     elif SEMversion == 'SEM5':  # found maximum possible flow in network
+      MARK_LINKS_AS_CRITICAL_EVEN_IF_OUTSIDE_FIRE = False  # for debugging
+#      MARK_LINKS_AS_CRITICAL_EVEN_IF_OUTSIDE_FIRE = True  # for debugging: the purpose of MARK_LINKS_AS_CRITICAL_EVEN_IF_OUTSIDE_FIRE being True is to avoid having to calculate 'fireBounds' - this is useful when testing the maximum-flow method in the context of no fire; TODO: comment out this line once debugging is complete
       if (a,b) in qij:
 #        linkJSON["properties"]["flow"] = qij[a, b]
         linkJSON["properties"]["flow"] = float(qij[a, b])
@@ -3729,8 +3738,9 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
           e = max(x0, x1)
           s = min(y0, y1)
           n = max(y0, y1)
-#          if fireBounds.bbox_contains_coordinate:
-          if BoundingBox.boundingBoxContains(fireBounds, BoundingBox([[w,s],[e,n]])):
+##          if fireBounds.bbox_contains_coordinate:
+#          if BoundingBox.boundingBoxContains(fireBounds, BoundingBox([[w,s],[e,n]])):  # if 'fireBounds' contains the link, then mark the link as critical
+          if MARK_LINKS_AS_CRITICAL_EVEN_IF_OUTSIDE_FIRE or BoundingBox.boundingBoxContains(fireBounds, BoundingBox([[w,s],[e,n]])):  # TODO: restore the line above once debugging is complete
             linkJSON["properties"]["isCritical"] = 1
 ##            criticalLinksInsideFireBoundingBox.append( (nodeIDa,nodeIDb) )
 ##        linestringsWithCoords[key]['matsim_linkID']
@@ -3778,10 +3788,10 @@ def runSEM( SEMversion, JSONnetworkfilename, inflowsByNodeID, inflowsandflowperi
     print("networktype is", networktype)
     DRAWNODECOLOURS = True
     DRAWINTERMEDIATENODELABELS = False
-    DRAWNODELABELS = False
+    DRAWNODELABELS = True
     DRAWARCSANDARROWS = True
 #    DRAWARCLABELS = True  # show flow, density, speed on edges/arcs
-    DRAWARCLABELS = False  # do not show flow, density, speed on edges/arcs
+    DRAWARCLABELS = True  # do not show flow, density, speed on edges/arcs
 #    print("pointcoordsbyID is", pointcoordsbyID)
 #    if exception == None:
     debug("qij is %s" % qij)
