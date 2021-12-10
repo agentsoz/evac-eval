@@ -1,11 +1,11 @@
 # Overview of static-evacuation models (SEM)
 
-*Aim*: to identify bottlenecks in a road-network and the links that become congested as a consequence of the bottlenecks.
+*Aim*: to identify bottlenecks in a road-network and the links that become congested as a consequence of the bottlenecks. Because there are about 10^6 to 10^7 fire-scenarios, each giving rise to an associated sub-network of road-links, the implementation must be fast.
 
-What makes this problem difficult is that flow in an arc, and whether that flow is free or congested, affects and depends on the flows and congestion-states in adjacent arcs, both upstream and downstream.
+What makes this problem difficult is that flow in a link, and whether that flow is free or congested, affects and depends on the flows and congestion-states in adjacent links, both upstream and downstream, all of which in general are time-dependent.
 
 ## Inputs for a scenario
-* A network of links (edges) and nodes.
+* A network of directed links (arcs) and nodes.
 * Each link has a 
   * flow-capacity, 
   * free speed, 
@@ -17,6 +17,15 @@ What makes this problem difficult is that flow in an arc, and whether that flow 
 * Every node is either an injection-node or an exit-node, and not both.
 * The in-flow at an injection-node is sub-divided into specified *subflows*, one for each exit-node that has been assigned to that injection-node.
 
+## History of versions of the model
+
+* SEM1 models water-flow and can be implemented as fast code, but its monotonic-flow assumption means congestion does not arise; hence SEM1 can't realistically model traffic-flow.
+* SEM2 introduces a non-monotonic hump-shaped flow-function in which flow rises then falls with increasing density; congestion can thereby arise. But having only one variable ("pressure-head") per node overly restricts the allowable flow-configurations, that is, the model disallows reasonable sets of flows.
+* SEM3 makes use of established models of traffic-flow dynamics, in which free uncongested flow propagates downstream and bottleneck-induced congestion propagates upstream. Once all downstream-propagating flow-wavefronts have departed at the exit-nodes, the resulting flows yield a static solution. The simplifying assumption is made that congested flow propagates all the way to the injection-nodes, which leads to plausible results only on simple networks.
+* SEM4, which with hindsight should perhaps be called SEM3.1, generalises SEM3 to more-complex networks. The hope was that its time-dependent outputs would closely approximate those of the ABM, but the model and implementation are complex, and the implementation is thus far incomplete and would require optimisation to provide acceptable running-time.
+* SEM5 was motivated by the need for a model that is not too complex and has a fast implementation; an inherently static model seemed likely to satisfy these requirements, so the maximum-flow model was chosen for computation of flows. A link is considered congested if its flow is close to its capacity.
+* Dhirendra Singh created SEM6 ("MaxFlowSEM"? might still need a name), introducing the context of bush-fire evacuation by defining the injection- and exit-nodes with reference to the fire's perimeter, population distribution within and just outside the perimeter, and the highest-capacity links near aggregated subsets of population.
+
 ## Comparison of versions of the model
 
 Model | Why currently fails | Advantages | Drawbacks | Improvements (if any) needed to make model work
@@ -25,7 +34,8 @@ SEM1  | Each link has infinite flow-capacity, meaning congestion can't arise | S
 SEM2  | Traffic can flow out at any exit-node: can't send a subflow to its assigned exit-node. On at least one network having a solution, model can find no solution. | Quite simple to implement | Global optimiser is slow, and must often be run several times from different starting-vectors | Instead of one variable h per node, could try one variable (density) per arc, but without additional constraints the assignment to each arc of free or congested flow would be arbitrary
 SEM3  | Implementation is incomplete | Identifies some congested links; sends subflows to their assigned exit-nodes | Upstream propagation of congestion is perhaps too simplified; model and implementation are complex | Extension to correctly propagate shockfronts through nodes, with resulting downstream effects
 SEM4  | Implementation is incomplete | Identifies some congested links; sends subflows to their assigned exit-nodes; reports time- and link-dependent extent of upstream-propagating congestion | Model and implementation are complex | Extension to correctly propagate shockfronts through nodes, with resulting downstream effects
-SEM5  | If capacities allow, maximum-flow method correctly sends total assigned flow from each injection-node and total assigned flow to each exit-node; but doesn't satisfy individual subflows between origin/destination pairs | Maximum-flow is implemented in libraries, and code is fast | Doesn't consider individual subflows between injection/exit pairs, so fails to detect all congestion along subflows (reports false negatives) | Apply maximum-flow method to the sub-network containing only links used by assigned subflows
+SEM5  | If capacities allow, maximum-flow method correctly sends total assigned flow from each injection-node and total assigned flow to each exit-node; but doesn't satisfy individual subflows between origin/destination pairs | Maximum-flow is implemented in libraries, and code is fast | Provides no information on dynamic evolution of flows; doesn't consider individual subflows between injection/exit pairs, so fails to detect all congestion along subflows (reports false negatives) | Apply maximum-flow method to the sub-network containing only links used by assigned subflows
+SEM6  | As for SEM5 | Injection- and exit-nodes are quickly calculated by making use of pre-processed road-network data. | As for SEM5 | 
 
 ## Versions of the model in more detail
 
@@ -45,8 +55,9 @@ SEM5  | If capacities allow, maximum-flow method correctly sends total assigned 
   - 500 from node 2 to node 0
   - 500 from node 2 to node 4
 
-has the unique solution shown (flow-capacities in square brackets). But with one h-variable per node, SEM2 cannot find this solution, even if we allow arbitrary h-values at exit-nodes: two links with flows of 500 implies h2-h0 = h2-h3, but h2-h0 = (h2-h3)+(h3-h0) > h2-h3, a contradiction.
+has the unique solution shown (flow-capacities in square brackets). But with one h-variable per node, SEM2 cannot find this solution, even if we allow arbitrary h-values at exit-nodes: the two links that leave node 2 both having flows of 500 implies h2-h0 = h2-h3, but then h3-h0 = (h2-h0)-(h2-h3) = 0, implying zero flow from node 3 to node 0.
 ![Diagram: five-node network with no SEM2 solution](fivenode-nopossibleSEM2soln-triangularflowfn-100-1000.png)
+* Even if subflows are not assigned, SEM2 cannot find a solution satisfying the specified total inflows at nodes 1 and 2 of 100 and 1,000 respectively: if the total inflow of 1,000 at node 2 enters the network, then by the above argument, flow from node 3 to node 0 must be zero in SEM2. (This might be more easily seen if the arc from node 3 to node 4 is removed.)
 * Could seek to improve model by replacing h-variables at nodes with one density-variable per arc, but then the model wouldn't be able to choose on each link between low (free) and high (congested) densities, so there would be at least 2^|E| distinct solutions and the model wouldn't reliably report congestion: would need additional constraints to enforce relationships between adjacent links' densities.
 
 ### SEM3 - traffic-flow along road-links: congestion results from insufficient capacity downstream
@@ -83,7 +94,7 @@ Maximum-flow method finds maximum flow (1000) equal to the total of assigned sub
 
 ## Next steps for development
 * Complete implementation of SEM3/4 to correctly propagate congested flow upstream.
-* Perhaps optimise SEM3/4 to obtain an improved time-complexity, which is currently as high as O(E N^4).
+* Optimise SEM3/4 to obtain an improved time-complexity, which is currently as high as O(E N^4).
 * Modify SEM5 to find maximum flow through the sub-network containing only links used by assigned subflows.
 
 
