@@ -1,17 +1,12 @@
 {
-  "evacuationLayer_UNUSED": "./mtAlexanderShire/20181109_mountalex_evac_ffdi100d_grid.tif",
-  "populationLayer": "modelinputsMtAlexander/sem/populationArchetypes_1000.tif",
-  "networkGeoJSON": "modelinputsMtAlexander/sem/mount_alexander_shire_network_2018.links-readable.geojson",
-  "outputGeoJSON": "outputsMtAlexander/SEMoutput_network.geojson",
-  "networkConfig_UNUSED" : {
-    "constant": 100.0,
-    "defaultLinkType": 3,
-    "defaultDiameter": 1
-  },
-  "FIRE_BOUNDS_EXTENSION_m": 20000.0,
-  "CELLSIZEFINE_m": 80.0,
-  "CELLSIZESMALL_m_UNUSED": 100.0,
-  "CELLSIZELARGE_m": 1000.0,
-  "INNERDIST_SAFEBUFFER_m": 1000.0,
-  "OUTERDIST_SAFEBUFFER_m": 2000.0
+  "evacuationLayerTemplate": "modelinputsMtAlexander/sem/20181109_mountalex_evac_ffdi100*_grid.tif",
+  "populationLayerTemplate": "modelinputsMtAlexander/sem/populationArchetypes_xxxx.tif",
+  "networkGeoJSON": "modelinputsMtAlexander/sem/mount_alexander_shire_network_2018.links.geojson",
+  "maxFlowSEMoutputTemplate": "outputsMtAlexander/SEMoutput_network_xxxx_*.geojson",
+  "ignitionRiskOutputTemplate": "outputsMtAlexander/ignitionRisk_xxxx.tif",
+  "networkRiskPropertiesOutputTemplate": "outputsMtAlexander/roadNetworkWithRiskProperties_xxxx.geojson",
+  "CELLSIZELARGE_m": 1000,
+  "CELLSIZEFINE_m": 80,
+  "INNERDIST_SAFEBUFFER_m": 1000,
+  "OUTERDIST_SAFEBUFFER_m": 2000
 }
