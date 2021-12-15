@@ -64,9 +64,9 @@ has the unique solution shown (flow-capacities in square brackets). But with one
 * Even if subflows are not assigned, SEM2 cannot find a solution satisfying the specified total inflows at nodes 1 and 2 of 100 and 1,000 respectively: if the total inflow of 1,000 at node 2 enters the network, then by the above argument, flow from node 3 to node 0 must be zero in SEM2. (This might be more easily seen if nodes 1 and node 4 are removed.)
 * Could seek to improve model by replacing h-variables at nodes with one density-variable per arc, but then the model wouldn't be able to choose on each link between low (free) and high (congested) densities, so there would be at least 2^|E| distinct solutions and the model wouldn't reliably report congestion: would need additional constraints to enforce relationships between adjacent links' densities.
 
-* Update: the three-node network illustrated below, with all links having equal free speed and number of lanes, and an inflow of 1,000 vehicles per hour at the injection-node 0, has the unique solution (q01, q02, q12) shown (flow-capacities in square brackets). 
+* Update: the three-node network illustrated below, with all links having equal free speed and number of lanes, and an inflow of 1,000 vehicles per hour at the injection-node 0, has the unique flows-solution (q01, q02, q12) shown (flow-capacities in square brackets). 
 Because the flow in link (0,1) equals the link's capacity of 500, then if SEM2 can admit this solution it must be that h0 - h1 is equal to the density rhoC_01 that achieves capacity flow (see diagram below of the triangular flow-function). The same argument applied to link (0,2) shows that h0 - h2 is equal to rhoC_02. But these two links have the same capacity, free speed, and number of lanes, which implies rhoC_01 = rhoC_02. 
-Therefore h0-h1 = h0-h2, but then h1-h2 = (h0-h2)-(h0-h1) = 0, implying zero flow from node 1 to node 2: there is no way for SEM2 to allow flows of 500 on all three links.
+Therefore h0-h1 = h0-h2, but then h1-h2 = (h0-h2)-(h0-h1) = 0, implying zero flow from node 1 to node 2; hence there is no way for SEM2 to allow flows of 500 on all three links.
 ![Diagram: three-node network with no SEM2 solution](threenode-nopossibleSEM2soln-triangularflowfn-1000.png)
 
 ### SEM3 - traffic-flow along road-links: congestion results from insufficient capacity downstream
